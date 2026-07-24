@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: gis_app
+      POSTGRES_USER: gis_user
+      POSTGRES_PASSWORD: gis_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gis_user -d gis_app"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgis://gis_user:gis_password@db:5432/gis_app
+    volumes:
+      - .:/app
+      - media_data:/app/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  martin:
+    image: ghcr.io/maplibre/martin:v0.14
+    command: ["postgresql://gis_user:gis_password@db:5432/gis_app"]
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  media_data:

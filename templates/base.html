@@ -1,0 +1,34 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}GeoLayers{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  {% if user.is_authenticated %}
+  <header class="topbar">
+    <a class="brand" href="{% url 'core:dashboard' %}">GeoLayers</a>
+    <nav>
+      <a href="{% url 'core:dashboard' %}">Dashboard</a>
+      <a href="{% url 'core:layer_list' %}">Layers</a>
+      <a href="{% url 'core:map_list' %}">Maps</a>
+      {% if user.is_staff %}<a href="{% url 'admin:index' %}">Admin</a>{% endif %}
+    </nav>
+    <div class="user-menu">
+      <span>{{ user.username }}</span>
+      <button id="logout-btn" class="btn btn-link">Sign out</button>
+    </div>
+  </header>
+  {% endif %}
+
+  <main class="page {% block page_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="{% static 'js/auth.js' %}"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

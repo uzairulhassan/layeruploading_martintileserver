@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Dashboard · GeoLayers{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <h1>Welcome, {{ user.get_full_name|default:user.username }}</h1>
+</div>
+
+<div class="grid grid-2">
+  <div class="card">
+    <h3>Layers</h3>
+    <p class="muted" id="layer-count">Loading…</p>
+    <a class="btn btn-primary" href="{% url 'core:layer_list' %}">Manage layers</a>
+  </div>
+  <div class="card">
+    <h3>Maps</h3>
+    <p class="muted" id="map-count">Loading…</p>
+    <a class="btn btn-primary" href="{% url 'core:map_list' %}">Manage maps</a>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    const [layersRes, mapsRes] = await Promise.all([
+      Auth.apiFetch("/api/layers/"),
+      Auth.apiFetch("/api/maps/"),
+    ]);
+    const layers = await layersRes.json();
+    const maps = await mapsRes.json();
+    document.getElementById("layer-count").textContent = `${layers.count} layer(s) uploaded or shared with you.`;
+    document.getElementById("map-count").textContent = `${maps.count} map(s) created or shared with you.`;
+  } catch (err) {
+    console.error(err);
+  }
+});
+</script>
+{% endblock %}

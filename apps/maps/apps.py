@@ -1,0 +1,8 @@
+from django.apps import AppConfig
+
+
+class MapsConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.maps"
+    label = "maps"
+    verbose_name = "Maps"

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Maps · GeoLayers{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <h1>Maps</h1>
+  <a class="btn btn-primary" href="{% url 'core:map_new' %}">New map</a>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr><th>Name</th><th>Layers</th><th>Owner</th><th>Access</th><th></th></tr>
+    </thead>
+    <tbody id="maps-tbody">
+      <tr><td colspan="5" class="muted">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Share modal -->
+<div id="share-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2>Share map</h2>
+    <input type="hidden" id="share-map-id">
+    <div class="form-group">
+      <label for="share-search">Find user (username or email)</label>
+      <input type="text" id="share-search">
+      <div id="share-results" class="muted"></div>
+    </div>
+    <div class="form-group">
+      <label for="share-permission">Permission</label>
+      <select id="share-permission">
+        <option value="view">View only</option>
+        <option value="edit">Can edit layers &amp; layout</option>
+      </select>
+    </div>
+    <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
+    <h3 style="margin-top:1.2rem;font-size:0.85rem;color:var(--color-text-muted);">Currently shared with</h3>
+    <ul id="share-list" class="muted" style="padding-left:1.1rem;"></ul>
+    <div class="modal-actions">
+      <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{% static 'js/map_list.js' %}"></script>
+{% endblock %}

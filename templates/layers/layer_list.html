@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Layers · GeoLayers{% endblock %}
+{% block content %}
+<div class="toolbar">
+  <h1>Layers</h1>
+  <button class="btn btn-primary" id="open-upload-modal">Upload shapefile</button>
+</div>
+
+<div class="card">
+  <table id="layers-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Geometry</th>
+        <th>Features</th>
+        <th>Owner</th>
+        <th>Access</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="layers-tbody">
+      <tr><td colspan="6" class="muted">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Upload modal -->
+<div id="upload-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2>Upload shapefile</h2>
+    <form id="upload-form">
+      <div class="form-group">
+        <label for="upload-name">Layer name</label>
+        <input type="text" id="upload-name" required>
+      </div>
+      <div class="form-group">
+        <label for="upload-description">Description</label>
+        <textarea id="upload-description" rows="2"></textarea>
+      </div>
+      <div class="form-group">
+        <label for="upload-file">Shapefile (.zip containing .shp/.shx/.dbf/.prj)</label>
+        <input type="file" id="upload-file" accept=".zip" required>
+      </div>
+      <div id="upload-error" class="error-text hidden"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close-modal="upload-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="upload-submit">Upload</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Rename modal -->
+<div id="rename-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2>Rename layer</h2>
+    <form id="rename-form">
+      <input type="hidden" id="rename-id">
+      <div class="form-group">
+        <label for="rename-name">Layer name</label>
+        <input type="text" id="rename-name" required>
+      </div>
+      <div class="form-group">
+        <label for="rename-description">Description</label>
+        <textarea id="rename-description" rows="2"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close-modal="rename-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Style modal -->
+<div id="style-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2>Layer style &amp; labels</h2>
+    <form id="style-form">
+      <input type="hidden" id="style-id">
+      <div class="form-group">
+        <label for="style-fill-color">Fill / line color</label>
+        <input type="text" id="style-fill-color" placeholder="#1f6feb">
+      </div>
+      <div class="form-group">
+        <label for="style-stroke-color">Stroke color</label>
+        <input type="text" id="style-stroke-color" placeholder="#0b2e63">
+      </div>
+      <div class="form-group">
+        <label for="style-stroke-width">Stroke width (px)</label>
+        <input type="number" id="style-stroke-width" min="0" step="0.5" value="1">
+      </div>
+      <div class="form-group">
+        <label for="style-opacity">Fill opacity</label>
+        <input type="number" id="style-opacity" min="0" max="1" step="0.05" value="0.6">
+      </div>
+      <hr>
+      <div class="form-group">
+        <label for="label-field">Label field</label>
+        <select id="label-field"><option value="">(no labels)</option></select>
+      </div>
+      <div class="form-group">
+        <label for="label-color">Label text color</label>
+        <input type="text" id="label-color" placeholder="#1c2733">
+      </div>
+      <div class="form-group">
+        <label for="label-size">Label size (px)</label>
+        <input type="number" id="label-size" min="8" max="36" value="12">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close-modal="style-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save style</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Share modal -->
+<div id="share-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2>Share layer</h2>
+    <input type="hidden" id="share-layer-id">
+    <div class="form-group">
+      <label for="share-search">Find user (username or email)</label>
+      <input type="text" id="share-search">
+      <div id="share-results" class="muted"></div>
+    </div>
+    <div class="form-group">
+      <label for="share-permission">Permission</label>
+      <select id="share-permission">
+        <option value="view">View only</option>
+        <option value="edit">Can edit style &amp; labels</option>
+      </select>
+    </div>
+    <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
+    <h3 style="margin-top:1.2rem;font-size:0.85rem;color:var(--color-text-muted);">Currently shared with</h3>
+    <ul id="share-list" class="muted" style="padding-left:1.1rem;"></ul>
+    <div class="modal-actions">
+      <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{% static 'js/layers.js' %}"></script>
+{% endblock %}

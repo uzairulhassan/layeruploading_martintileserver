@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Sign in · GeoLayers{% endblock %}
+{% block content %}
+<div class="auth-shell">
+  <div class="card auth-card">
+    <h1>Sign in to GeoLayers</h1>
+    <form id="login-form">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autofocus>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+      </div>
+      <div id="login-error" class="error-text hidden"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Sign in</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{% static 'js/login.js' %}"></script>
+{% endblock %}

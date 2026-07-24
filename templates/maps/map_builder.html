@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Map builder · GeoLayers{% endblock %}
+{% block extra_head %}
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
+<style>.page.full-bleed .map-builder{height:calc(100vh - 57px);}</style>
+{% endblock %}
+{% block page_class %}full-bleed{% endblock %}
+{% block content %}
+<div id="builder-root"
+     data-map-id="{{ map_id }}"
+     data-mapbox-token="{{ MAPBOX_ACCESS_TOKEN }}"
+     data-martin-url="{{ MARTIN_TILE_SERVER_URL }}">
+
+  <!-- Shown only when creating a brand new map -->
+  <div id="create-panel" class="card hidden" style="max-width:420px;margin:2rem auto;">
+    <h2>Create a new map</h2>
+    <div class="form-group">
+      <label for="new-map-name">Map name</label>
+      <input type="text" id="new-map-name" placeholder="e.g. Regional Land Use">
+    </div>
+    <button class="btn btn-primary" id="create-map-btn">Create map</button>
+  </div>
+
+  <div id="builder-panel" class="map-builder hidden">
+    <aside class="map-sidebar">
+      <div class="form-group">
+        <label for="map-name-input">Map name</label>
+        <input type="text" id="map-name-input">
+      </div>
+      <div class="form-group">
+        <label for="basemap-select">Basemap</label>
+        <select id="basemap-select">
+          <option value="mapbox://styles/mapbox/streets-v12">Streets</option>
+          <option value="mapbox://styles/mapbox/light-v11">Light</option>
+          <option value="mapbox://styles/mapbox/dark-v11">Dark</option>
+          <option value="mapbox://styles/mapbox/satellite-streets-v12">Satellite</option>
+          <option value="mapbox://styles/mapbox/outdoors-v12">Outdoors</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:0.5rem;">
+        <button class="btn btn-primary" id="save-map-btn" style="flex:1;">Save map</button>
+        <button class="btn" id="share-map-btn">Share</button>
+      </div>
+      <p class="muted" id="permission-note" style="margin-top:0.5rem;"></p>
+
+      <h3>On this map</h3>
+      <div id="active-layers"></div>
+
+      <h3>Your layers</h3>
+      <div id="available-layers"></div>
+    </aside>
+    <div id="map-canvas"></div>
+  </div>
+</div>
+
+<!-- Share modal (reused) -->
+<div id="share-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2>Share map</h2>
+    <div class="form-group">
+      <label for="share-search">Find user (username or email)</label>
+      <input type="text" id="share-search">
+      <div id="share-results" class="muted"></div>
+    </div>
+    <div class="form-group">
+      <label for="share-permission">Permission</label>
+      <select id="share-permission">
+        <option value="view">View only</option>
+        <option value="edit">Can edit layers &amp; layout</option>
+      </select>
+    </div>
+    <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
+    <h3 style="margin-top:1.2rem;font-size:0.85rem;color:var(--color-text-muted);">Currently shared with</h3>
+    <ul id="share-list" class="muted" style="padding-left:1.1rem;"></ul>
+    <div class="modal-actions">
+      <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+<script src="{% static 'js/map_builder.js' %}"></script>
+{% endblock %}
