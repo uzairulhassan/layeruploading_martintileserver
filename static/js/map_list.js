@@ -19,7 +19,7 @@ async function loadMaps() {
 function renderMaps() {
   const tbody = document.getElementById("maps-tbody");
   if (!CURRENT_MAPS.length) {
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">No maps yet. Create one to overlay your layers.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><strong>No maps yet</strong>Create one to overlay your layers.</div></td></tr>`;
     return;
   }
   tbody.innerHTML = CURRENT_MAPS.map((map) => `
@@ -28,7 +28,7 @@ function renderMaps() {
       <td>${map.map_layers.length}</td>
       <td>${map.owner_detail.display_name}</td>
       <td><span class="badge">${map.my_permission}</span></td>
-      <td style="text-align:right;white-space:nowrap;">
+      <td class="table-actions">
         <a class="btn btn-sm" href="/maps/${map.id}/">Open</a>
         ${map.my_permission === "owner" ? `
           <button class="btn btn-sm" data-action="share" data-id="${map.id}">Share</button>
@@ -101,8 +101,8 @@ document.getElementById("share-search").addEventListener("input", (event) => {
     const data = await res.json();
     const results = data.results || data;
     document.getElementById("share-results").innerHTML = results.map((u) => `
-      <div class="layer-row" data-user-id="${u.id}" style="cursor:pointer;">${u.display_name} (${u.username})</div>
-    `).join("") || "No users found.";
+      <div class="share-hit" data-user-id="${u.id}">${u.display_name} (${u.username})</div>
+    `).join("") || `<p class="muted">No users found.</p>`;
     document.querySelectorAll("#share-results [data-user-id]").forEach((row) => {
       row.addEventListener("click", () => {
         SELECTED_SHARE_USER = results.find((u) => String(u.id) === row.dataset.userId);

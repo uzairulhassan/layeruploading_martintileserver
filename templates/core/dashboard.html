@@ -2,21 +2,27 @@
 {% load static %}
 {% block title %}Dashboard · GeoLayers{% endblock %}
 {% block content %}
-<div class="toolbar">
-  <h1>Welcome, {{ user.get_full_name|default:user.username }}</h1>
-</div>
+<header class="page-header">
+  <div>
+    <p class="welcome-kicker">Dashboard</p>
+    <h1 class="welcome-title">Welcome, {{ user.get_full_name|default:user.username }}</h1>
+    <p class="lede">Manage spatial layers and compose maps from one place.</p>
+  </div>
+</header>
 
-<div class="grid grid-2">
-  <div class="card">
-    <h3>Layers</h3>
-    <p class="muted" id="layer-count">Loading…</p>
+<div class="section-split">
+  <section>
+    <p class="stat-label">Layers</p>
+    <p class="stat-value" id="layer-count-num">—</p>
+    <p class="stat-copy" id="layer-count">Loading…</p>
     <a class="btn btn-primary" href="{% url 'core:layer_list' %}">Manage layers</a>
-  </div>
-  <div class="card">
-    <h3>Maps</h3>
-    <p class="muted" id="map-count">Loading…</p>
+  </section>
+  <section>
+    <p class="stat-label">Maps</p>
+    <p class="stat-value" id="map-count-num">—</p>
+    <p class="stat-copy" id="map-count">Loading…</p>
     <a class="btn btn-primary" href="{% url 'core:map_list' %}">Manage maps</a>
-  </div>
+  </section>
 </div>
 {% endblock %}
 {% block extra_scripts %}
@@ -29,10 +35,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     ]);
     const layers = await layersRes.json();
     const maps = await mapsRes.json();
-    document.getElementById("layer-count").textContent = `${layers.count} layer(s) uploaded or shared with you.`;
-    document.getElementById("map-count").textContent = `${maps.count} map(s) created or shared with you.`;
+    const layerN = layers.count ?? (layers.results || layers).length ?? 0;
+    const mapN = maps.count ?? (maps.results || maps).length ?? 0;
+    document.getElementById("layer-count-num").textContent = layerN;
+    document.getElementById("map-count-num").textContent = mapN;
+    document.getElementById("layer-count").textContent =
+      layerN === 1
+        ? "1 layer uploaded or shared with you."
+        : `${layerN} layers uploaded or shared with you.`;
+    document.getElementById("map-count").textContent =
+      mapN === 1
+        ? "1 map created or shared with you."
+        : `${mapN} maps created or shared with you.`;
   } catch (err) {
     console.error(err);
+    document.getElementById("layer-count").textContent = "Could not load layer summary.";
+    document.getElementById("map-count").textContent = "Could not load map summary.";
   }
 });
 </script>

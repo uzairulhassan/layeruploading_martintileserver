@@ -11,15 +11,42 @@
   {% if user.is_authenticated %}
   <header class="topbar">
     <a class="brand" href="{% url 'core:dashboard' %}">GeoLayers</a>
-    <nav>
-      <a href="{% url 'core:dashboard' %}">Dashboard</a>
-      <a href="{% url 'core:layer_list' %}">Layers</a>
-      <a href="{% url 'core:map_list' %}">Maps</a>
+    <nav class="topbar-nav" aria-label="Main">
+      <a href="{% url 'core:dashboard' %}" {% if request.resolver_match.url_name == 'dashboard' %}class="is-active"{% endif %}>Dashboard</a>
+      <a href="{% url 'core:layer_list' %}" {% if request.resolver_match.url_name == 'layer_list' %}class="is-active"{% endif %}>Layers</a>
+      <a href="{% url 'core:map_list' %}" {% if request.resolver_match.url_name == 'map_list' or request.resolver_match.url_name == 'map_new' or request.resolver_match.url_name == 'map_builder' %}class="is-active"{% endif %}>Maps</a>
       {% if user.is_staff %}<a href="{% url 'admin:index' %}">Admin</a>{% endif %}
     </nav>
     <div class="user-menu">
-      <span>{{ user.username }}</span>
-      <button id="logout-btn" class="btn btn-link">Sign out</button>
+      <button
+        type="button"
+        id="profile-menu-btn"
+        class="profile-btn"
+        aria-haspopup="true"
+        aria-expanded="false"
+        aria-controls="profile-menu"
+        title="Account"
+      >
+        <svg class="profile-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="1.75"/>
+          <path d="M5 19.5c1.8-3.2 4.2-4.8 7-4.8s5.2 1.6 7 4.8" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div id="profile-menu" class="profile-dropdown hidden" role="menu">
+        <div class="profile-dropdown-meta" role="none">
+          <div class="profile-meta-row">
+            <span class="profile-meta-label">Username</span>
+            <span class="profile-meta-value">{{ user.username }}</span>
+          </div>
+          {% if user.email %}
+          <div class="profile-meta-row">
+            <span class="profile-meta-label">Email</span>
+            <span class="profile-meta-value">{{ user.email }}</span>
+          </div>
+          {% endif %}
+        </div>
+        <button type="button" id="logout-btn" class="profile-dropdown-logout" role="menuitem">Sign out</button>
+      </div>
     </div>
   </header>
   {% endif %}

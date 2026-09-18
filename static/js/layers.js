@@ -18,7 +18,7 @@ async function loadLayers() {
 function renderLayers() {
   const tbody = document.getElementById("layers-tbody");
   if (!CURRENT_LAYERS.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">No layers yet. Upload a shapefile to get started.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><strong>No layers yet</strong>Upload a shapefile to get started.</div></td></tr>`;
     return;
   }
   tbody.innerHTML = CURRENT_LAYERS.map((layer) => `
@@ -28,7 +28,7 @@ function renderLayers() {
       <td>${layer.feature_count}</td>
       <td>${layer.owner_detail ? layer.owner_detail.display_name : ""}</td>
       <td><span class="badge">${layer.my_permission}</span></td>
-      <td style="text-align:right;white-space:nowrap;">
+      <td class="table-actions">
         <button class="btn btn-sm" data-action="style" data-id="${layer.id}">Style</button>
         ${layer.my_permission === "owner" ? `
           <button class="btn btn-sm" data-action="rename" data-id="${layer.id}">Rename</button>
@@ -123,8 +123,8 @@ async function deleteLayer(layer) {
 function openStyleModal(layer) {
   document.getElementById("style-id").value = layer.id;
   const style = layer.style || {};
-  document.getElementById("style-fill-color").value = style.color || "#1f6feb";
-  document.getElementById("style-stroke-color").value = style.strokeColor || "#0b2e63";
+  document.getElementById("style-fill-color").value = style.color || "#0F2D53";
+  document.getElementById("style-stroke-color").value = style.strokeColor || "#0a2140";
   document.getElementById("style-stroke-width").value = style.strokeWidth ?? 1;
   document.getElementById("style-opacity").value = style.opacity ?? 0.6;
 
@@ -135,7 +135,7 @@ function openStyleModal(layer) {
 
   const labelConfig = layer.label_config || {};
   labelSelect.value = labelConfig.field || "";
-  document.getElementById("label-color").value = labelConfig.color || "#1c2733";
+  document.getElementById("label-color").value = labelConfig.color || "#0F2D53";
   document.getElementById("label-size").value = labelConfig.size || 12;
 
   const canEdit = layer.my_permission === "owner" || layer.my_permission === "edit";
@@ -218,8 +218,8 @@ document.getElementById("share-search").addEventListener("input", (event) => {
     const data = await res.json();
     const results = data.results || data;
     document.getElementById("share-results").innerHTML = results.map((u) => `
-      <div class="layer-row" data-user-id="${u.id}" style="cursor:pointer;">${u.display_name} (${u.username})</div>
-    `).join("") || "No users found.";
+      <div class="share-hit" data-user-id="${u.id}">${u.display_name} (${u.username})</div>
+    `).join("") || `<p class="muted">No users found.</p>`;
     document.querySelectorAll("#share-results [data-user-id]").forEach((row) => {
       row.addEventListener("click", () => {
         SELECTED_SHARE_USER = results.find((u) => String(u.id) === row.dataset.userId);

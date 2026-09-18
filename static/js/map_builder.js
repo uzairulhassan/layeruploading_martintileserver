@@ -46,7 +46,7 @@ async function createMap() {
 async function loadMap() {
   const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/`);
   if (!res.ok) {
-    document.getElementById("builder-panel").innerHTML = `<p class="muted">Map not found or access denied.</p>`;
+    document.getElementById("builder-panel").innerHTML = `<div class="builder-error"><p class="muted">Map not found or access denied.</p></div>`;
     return;
   }
   MAP_DATA = await res.json();
@@ -236,9 +236,9 @@ function addMapboxLayer(mapLayer) {
       id, source: sourceId, "source-layer": tableName, type: "circle",
       layout: { visibility },
       paint: {
-        "circle-color": style.color || "#1f6feb",
+        "circle-color": style.color || "#0F2D53",
         "circle-radius": 5,
-        "circle-stroke-color": style.strokeColor || "#0b2e63",
+        "circle-stroke-color": style.strokeColor || "#0a2140",
         "circle-stroke-width": style.strokeWidth ?? 1,
         "circle-opacity": mapLayer.opacity ?? style.opacity ?? 0.8,
       },
@@ -250,7 +250,7 @@ function addMapboxLayer(mapLayer) {
       id, source: sourceId, "source-layer": tableName, type: "line",
       layout: { visibility },
       paint: {
-        "line-color": style.color || "#1f6feb",
+        "line-color": style.color || "#0F2D53",
         "line-width": style.strokeWidth ?? 2,
         "line-opacity": mapLayer.opacity ?? style.opacity ?? 1,
       },
@@ -263,7 +263,7 @@ function addMapboxLayer(mapLayer) {
       id, source: sourceId, "source-layer": tableName, type: "fill",
       layout: { visibility },
       paint: {
-        "fill-color": style.color || "#1f6feb",
+        "fill-color": style.color || "#0F2D53",
         "fill-opacity": mapLayer.opacity ?? style.opacity ?? 0.6,
       },
     });
@@ -271,7 +271,7 @@ function addMapboxLayer(mapLayer) {
       id: outlineId, source: sourceId, "source-layer": tableName, type: "line",
       layout: { visibility },
       paint: {
-        "line-color": style.strokeColor || "#0b2e63",
+        "line-color": style.strokeColor || "#0a2140",
         "line-width": style.strokeWidth ?? 1,
       },
     });
@@ -289,7 +289,7 @@ function addMapboxLayer(mapLayer) {
         "text-size": labelConfig.size || 12,
         "text-anchor": "top",
       },
-      paint: { "text-color": labelConfig.color || "#1c2733" },
+      paint: { "text-color": labelConfig.color || "#0F2D53" },
     });
     ADDED_MAPBOX_LAYER_IDS.push(labelId);
   }
@@ -357,8 +357,8 @@ document.getElementById("share-search").addEventListener("input", (event) => {
     const data = await res.json();
     const results = data.results || data;
     document.getElementById("share-results").innerHTML = results.map((u) => `
-      <div class="layer-row" data-user-id="${u.id}" style="cursor:pointer;">${u.display_name} (${u.username})</div>
-    `).join("") || "No users found.";
+      <div class="share-hit" data-user-id="${u.id}">${u.display_name} (${u.username})</div>
+    `).join("") || `<p class="muted">No users found.</p>`;
     document.querySelectorAll("#share-results [data-user-id]").forEach((row) => {
       row.addEventListener("click", () => {
         SELECTED_SHARE_USER = results.find((u) => String(u.id) === row.dataset.userId);

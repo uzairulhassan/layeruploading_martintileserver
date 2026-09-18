@@ -117,10 +117,38 @@ const Auth = (() => {
     return response;
   }
 
-  return { login, logout, apiFetch, getAccessToken, getRefreshToken, clearTokens };
+  return { login, logout, apiFetch };
 })();
 
 document.addEventListener("DOMContentLoaded", () => {
   const logoutBtn = document.getElementById("logout-btn");
   if (logoutBtn) logoutBtn.addEventListener("click", () => Auth.logout());
+
+  const profileBtn = document.getElementById("profile-menu-btn");
+  const profileMenu = document.getElementById("profile-menu");
+  if (!profileBtn || !profileMenu) return;
+
+  function setMenuOpen(open) {
+    profileMenu.classList.toggle("hidden", !open);
+    profileBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  profileBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setMenuOpen(profileMenu.classList.contains("hidden"));
+  });
+
+  document.addEventListener("click", (event) => {
+    if (
+      !profileMenu.classList.contains("hidden")
+      && !profileMenu.contains(event.target)
+      && !profileBtn.contains(event.target)
+    ) {
+      setMenuOpen(false);
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") setMenuOpen(false);
+  });
 });

@@ -30,7 +30,7 @@ services:
         condition: service_healthy
 
   martin:
-    image: ghcr.io/maplibre/martin:v0.14
+    image: ghcr.io/maplibre/martin:v0.14.0
     command: ["postgresql://gis_user:gis_password@db:5432/gis_app"]
     ports:
       - "3000:3000"

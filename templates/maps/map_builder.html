@@ -3,7 +3,6 @@
 {% block title %}Map builder · GeoLayers{% endblock %}
 {% block extra_head %}
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
-<style>.page.full-bleed .map-builder{height:calc(100vh - 57px);}</style>
 {% endblock %}
 {% block page_class %}full-bleed{% endblock %}
 {% block content %}
@@ -12,14 +11,13 @@
      data-mapbox-token="{{ MAPBOX_ACCESS_TOKEN }}"
      data-martin-url="{{ MARTIN_TILE_SERVER_URL }}">
 
-  <!-- Shown only when creating a brand new map -->
-  <div id="create-panel" class="card hidden" style="max-width:420px;margin:2rem auto;">
+  <div id="create-panel" class="create-panel hidden">
     <h2>Create a new map</h2>
     <div class="form-group">
       <label for="new-map-name">Map name</label>
       <input type="text" id="new-map-name" placeholder="e.g. Regional Land Use">
     </div>
-    <button class="btn btn-primary" id="create-map-btn">Create map</button>
+    <button type="button" class="btn btn-primary" id="create-map-btn">Create map</button>
   </div>
 
   <div id="builder-panel" class="map-builder hidden">
@@ -38,11 +36,11 @@
           <option value="mapbox://styles/mapbox/outdoors-v12">Outdoors</option>
         </select>
       </div>
-      <div style="display:flex; gap:0.5rem;">
-        <button class="btn btn-primary" id="save-map-btn" style="flex:1;">Save map</button>
-        <button class="btn" id="share-map-btn">Share</button>
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary" id="save-map-btn">Save map</button>
+        <button type="button" class="btn" id="share-map-btn">Share</button>
       </div>
-      <p class="muted" id="permission-note" style="margin-top:0.5rem;"></p>
+      <p class="muted permission-note" id="permission-note"></p>
 
       <h3>On this map</h3>
       <div id="active-layers"></div>
@@ -54,14 +52,13 @@
   </div>
 </div>
 
-<!-- Share modal (reused) -->
 <div id="share-modal" class="modal-backdrop hidden">
-  <div class="modal">
-    <h2>Share map</h2>
+  <div class="modal" role="dialog" aria-labelledby="builder-share-title">
+    <h2 id="builder-share-title">Share map</h2>
     <div class="form-group">
       <label for="share-search">Find user (username or email)</label>
       <input type="text" id="share-search">
-      <div id="share-results" class="muted"></div>
+      <div id="share-results" class="share-results muted"></div>
     </div>
     <div class="form-group">
       <label for="share-permission">Permission</label>
@@ -71,8 +68,8 @@
       </select>
     </div>
     <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
-    <h3 style="margin-top:1.2rem;font-size:0.85rem;color:var(--color-text-muted);">Currently shared with</h3>
-    <ul id="share-list" class="muted" style="padding-left:1.1rem;"></ul>
+    <p class="share-heading">Currently shared with</p>
+    <ul id="share-list" class="share-list muted"></ul>
     <div class="modal-actions">
       <button type="button" class="btn" data-close-modal="share-modal">Close</button>
     </div>
