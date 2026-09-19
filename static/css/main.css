@@ -677,6 +677,50 @@ tbody tr:hover {
   overflow-y: auto;
 }
 
+.modal.modal-wide {
+  width: 560px;
+}
+
+.xyz-modal-lede {
+  margin: -0.35rem 0 1.15rem;
+  font-size: 0.9rem;
+  color: var(--navy-muted);
+}
+
+.copy-field {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.copy-field input,
+.copy-field textarea {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.copy-field-tall {
+  align-items: flex-start;
+}
+
+.copy-field-tall textarea {
+  resize: vertical;
+}
+
+.copy-field .btn {
+  flex-shrink: 0;
+  align-self: flex-start;
+}
+
+.field-hint {
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+  color: var(--navy-muted);
+  line-height: 1.4;
+}
+
 .modal h2 {
   margin: 0 0 1.15rem;
   padding-bottom: 0.75rem;

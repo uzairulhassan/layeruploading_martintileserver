@@ -5,6 +5,16 @@ from apps.accounts.serializers import UserSummarySerializer
 
 from .models import LayerInfo, LayerShare
 
+# Map PostGIS geometry types → GeoTrak / MapLibre style hints.
+_SUGGESTED_GEOMETRY = {
+    LayerInfo.GeometryType.POINT: "circle",
+    LayerInfo.GeometryType.MULTIPOINT: "circle",
+    LayerInfo.GeometryType.LINESTRING: "line",
+    LayerInfo.GeometryType.MULTILINESTRING: "line",
+    LayerInfo.GeometryType.POLYGON: "fill",
+    LayerInfo.GeometryType.MULTIPOLYGON: "fill",
+}
+
 
 class LayerShareSerializer(serializers.ModelSerializer):
     shared_with_detail = UserSummarySerializer(source="shared_with", read_only=True)
@@ -23,6 +33,9 @@ class LayerShareSerializer(serializers.ModelSerializer):
 class LayerInfoSerializer(serializers.ModelSerializer):
     owner_detail = UserSummarySerializer(source="owner", read_only=True)
     tile_url = serializers.SerializerMethodField()
+    xyz_url = serializers.SerializerMethodField()
+    source_layer = serializers.SerializerMethodField()
+    suggested_geometry = serializers.SerializerMethodField()
     my_permission = serializers.SerializerMethodField()
     shares = LayerShareSerializer(many=True, read_only=True)
 
@@ -31,8 +44,9 @@ class LayerInfoSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "description", "owner", "owner_detail",
             "geometry_type", "srid", "feature_count", "bounds", "attribute_schema",
-            "style", "label_config", "source_filename", "tile_url", "my_permission",
-            "shares", "created_at", "updated_at",
+            "style", "label_config", "source_filename", "tile_url",
+            "xyz_url", "source_layer", "suggested_geometry",
+            "my_permission", "shares", "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "owner", "geometry_type", "srid", "feature_count", "bounds",
@@ -40,7 +54,19 @@ class LayerInfoSerializer(serializers.ModelSerializer):
         ]
 
     def get_tile_url(self, obj):
+        """Martin source base (no z/x/y). Used by the built-in map builder."""
         return f"{settings.MARTIN_TILE_SERVER_URL.rstrip('/')}/{obj.table_name}"
+
+    def get_xyz_url(self, obj):
+        """Shareable XYZ template for external map clients (e.g. GeoTrak)."""
+        return f"{self.get_tile_url(obj)}/{{z}}/{{x}}/{{y}}"
+
+    def get_source_layer(self, obj):
+        """Martin / MapLibre source-layer id (PostGIS table name)."""
+        return obj.table_name
+
+    def get_suggested_geometry(self, obj):
+        return _SUGGESTED_GEOMETRY.get(obj.geometry_type, "line")
 
     def get_my_permission(self, obj):
         request = self.context.get("request")

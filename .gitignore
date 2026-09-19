@@ -33,5 +33,10 @@ staticfiles/
 # OS
 .DS_Store
 
-# Uploaded shapefile temp extraction
+# Uploaded shapefile temp extraction / local samples (never commit)
 tmp_uploads/
+_tmp_*/
+*.zip
+*.bak
+*.orig
+*.rej

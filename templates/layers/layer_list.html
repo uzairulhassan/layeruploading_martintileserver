@@ -5,7 +5,7 @@
 <div class="toolbar">
   <div>
     <h1>Layers</h1>
-    <p class="lede">Upload shapefiles, style them, and share with your team.</p>
+    <p class="lede">Upload shapefiles, style them, share with your team, or copy an XYZ tile link for external maps.</p>
   </div>
   <button type="button" class="btn btn-primary" id="open-upload-modal">Upload shapefile</button>
 </div>
@@ -146,6 +146,53 @@
     <ul id="share-list" class="share-list muted"></ul>
     <div class="modal-actions">
       <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="xyz-modal" class="modal-backdrop hidden">
+  <div class="modal modal-wide" role="dialog" aria-labelledby="xyz-modal-title">
+    <h2 id="xyz-modal-title">XYZ tile link</h2>
+    <p class="lede xyz-modal-lede">
+      Use this vector tile URL in GeoTrak Maps or any MapLibre / Mapbox client.
+      Anyone with the URL can request tiles from Martin.
+    </p>
+    <input type="hidden" id="xyz-layer-id">
+
+    <div class="form-group">
+      <label for="xyz-url">XYZ URL template</label>
+      <div class="copy-field">
+        <input type="text" id="xyz-url" readonly spellcheck="false">
+        <button type="button" class="btn btn-sm" id="copy-xyz-url" data-copy-target="xyz-url">Copy</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="xyz-source-layer">Source layer</label>
+      <div class="copy-field">
+        <input type="text" id="xyz-source-layer" readonly spellcheck="false">
+        <button type="button" class="btn btn-sm" id="copy-xyz-source" data-copy-target="xyz-source-layer">Copy</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="xyz-geometry">Suggested geometry style</label>
+      <input type="text" id="xyz-geometry" readonly>
+    </div>
+
+    <div class="form-group">
+      <label for="xyz-package">GeoTrak import package</label>
+      <div class="copy-field copy-field-tall">
+        <textarea id="xyz-package" rows="6" readonly spellcheck="false"></textarea>
+        <button type="button" class="btn btn-sm" id="copy-xyz-package" data-copy-target="xyz-package">Copy</button>
+      </div>
+      <p class="field-hint">Paste this into GeoTrak → Tiles Configuration → Tile server URL to fill URL, source layer, and geometry in one step.</p>
+    </div>
+
+    <div id="xyz-copy-status" class="muted hidden" role="status"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-primary" id="copy-xyz-all">Copy package</button>
+      <button type="button" class="btn" data-close-modal="xyz-modal">Close</button>
     </div>
   </div>
 </div>

@@ -41,7 +41,10 @@ static/      Vanilla JS/CSS frontend (JWT wrapper, layer manager, map builder)
 4. Martin, running against the same database, automatically publishes that
    table as vector tiles at `MARTIN_TILE_SERVER_URL/layer_<uuid>/{z}/{x}/{y}` —
    no registration step needed.
-5. The map builder adds it as a `vector` source in Mapbox GL JS using that URL
+5. The Layers page **XYZ link** action exposes a shareable XYZ template plus a
+   GeoTrak import package (`xyz_url`, `source_layer`, `suggested_geometry` on
+   the API) so external MapLibre clients can consume the same tiles.
+6. The map builder adds it as a `vector` source in Mapbox GL JS using that URL
    and styles it (fill/line/circle + optional text labels) from `LayerInfo.style`
    / `LayerInfo.label_config`.
 

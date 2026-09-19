@@ -1,9 +1,9 @@
 # Optional Martin configuration.
 #
-# By default docker-compose.yml runs Martin with just a database connection
-# string, which auto-discovers every spatial table (including the dynamic
-# `layers_data.layer_<uuid>` tables created on shapefile upload) and publishes
-# each one as a vector tile source at /<table_name>.
+# By default docker-compose.yml / docker-compose.prod.yml run Martin with just a
+# database connection string, which auto-discovers every spatial table
+# (including dynamic `layers_data.layer_<uuid>` tables created on upload) and
+# publishes each one as a vector tile source at /<table_name>.
 #
 # If you need more control (restrict to a schema, tune extents/buffers, add
 # functions as sources, etc.) copy this file to config.yaml, adjust it, and

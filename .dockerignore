@@ -11,7 +11,14 @@ staticfiles
 media/*
 !media/.gitkeep
 tmp_uploads
+_tmp_*
+*.zip
+*.bak
+*.orig
 *.md
 .DS_Store
 .vscode
 .idea
+.env
+.env.*
+!.env.example

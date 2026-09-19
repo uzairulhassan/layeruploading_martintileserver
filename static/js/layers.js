@@ -29,6 +29,7 @@ function renderLayers() {
       <td>${layer.owner_detail ? layer.owner_detail.display_name : ""}</td>
       <td><span class="badge">${layer.my_permission}</span></td>
       <td class="table-actions">
+        <button class="btn btn-sm" data-action="xyz" data-id="${layer.id}">XYZ link</button>
         <button class="btn btn-sm" data-action="style" data-id="${layer.id}">Style</button>
         ${layer.my_permission === "owner" ? `
           <button class="btn btn-sm" data-action="rename" data-id="${layer.id}">Rename</button>
@@ -50,6 +51,7 @@ function findLayer(id) {
 
 function handleRowAction(action, id) {
   const layer = findLayer(id);
+  if (action === "xyz") openXyzModal(layer);
   if (action === "style") openStyleModal(layer);
   if (action === "rename") openRenameModal(layer);
   if (action === "share") openShareModal(layer);
@@ -274,6 +276,55 @@ document.getElementById("share-submit").addEventListener("click", async () => {
   document.getElementById("share-submit").disabled = true;
   SELECTED_SHARE_USER = null;
   document.getElementById("share-search").value = "";
+});
+
+// ---- XYZ shareable link ----
+function buildGeotrakPackage(layer) {
+  return {
+    geotrakLayer: true,
+    name: layer.name || "",
+    type: "vector",
+    url: layer.xyz_url || `${layer.tile_url}/{z}/{x}/{y}`,
+    sourceLayer: layer.source_layer || "",
+    geometry: layer.suggested_geometry || "line",
+  };
+}
+
+function openXyzModal(layer) {
+  const pkg = buildGeotrakPackage(layer);
+  document.getElementById("xyz-layer-id").value = layer.id;
+  document.getElementById("xyz-url").value = pkg.url;
+  document.getElementById("xyz-source-layer").value = pkg.sourceLayer;
+  document.getElementById("xyz-geometry").value = pkg.geometry;
+  document.getElementById("xyz-package").value = JSON.stringify(pkg, null, 2);
+  const status = document.getElementById("xyz-copy-status");
+  status.classList.add("hidden");
+  status.textContent = "";
+  openModal("xyz-modal");
+}
+
+async function copyFieldValue(targetId) {
+  const el = document.getElementById(targetId);
+  const text = el.value;
+  const status = document.getElementById("xyz-copy-status");
+  try {
+    await navigator.clipboard.writeText(text);
+    status.textContent = "Copied to clipboard.";
+    status.classList.remove("hidden");
+  } catch {
+    el.focus();
+    el.select?.();
+    status.textContent = "Could not copy automatically — select the text and copy manually.";
+    status.classList.remove("hidden");
+  }
+}
+
+document.querySelectorAll("#xyz-modal [data-copy-target]").forEach((btn) => {
+  btn.addEventListener("click", () => copyFieldValue(btn.dataset.copyTarget));
+});
+
+document.getElementById("copy-xyz-all").addEventListener("click", () => {
+  copyFieldValue("xyz-package");
 });
 
 document.addEventListener("DOMContentLoaded", () => {
