@@ -77,7 +77,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-- App: http://localhost:8000
+- App: http://localhost:6000
 - Martin tile server: http://localhost:3000
 - Create an admin user: `docker compose exec web python manage.py createsuperuser`
 
@@ -85,6 +85,52 @@ Martin is started with just a connection string (see `docker-compose.yml`),
 so it auto-discovers every table in the database, including each new
 `layers_data.layer_<uuid>` table as soon as it's created — nothing to restart.
 See `martin/config.example.yaml` if you'd rather pin it to an explicit config.
+
+## Server deployment (Docker)
+
+The app is served on **port 6000** (see `Dockerfile` / `docker-compose.yml`).
+Before deploying, make sure `.env` on the server has `DEBUG=False` and
+`ALLOWED_HOSTS` set to your domain/IP (e.g. `ALLOWED_HOSTS=your-server-ip,your-domain.com`).
+
+```bash
+# 1. Copy the repo to the server and configure environment
+cp .env.example .env
+# edit .env: DEBUG=False, ALLOWED_HOSTS, MAPBOX_ACCESS_TOKEN, DATABASE_URL, etc.
+
+# 2. Build images and start all services (db, web, martin) in the background
+docker compose up -d --build
+```
+
+- App: `http://<server-ip>:6000`
+- Martin tile server: `http://<server-ip>:3000`
+
+Database migrations and `collectstatic` run automatically on container start
+(see `entrypoint.sh`), so no separate migration step is required after
+`up -d`. To run migrations manually (e.g. after pulling new code into an
+already-running stack):
+
+```bash
+docker compose exec web python manage.py migrate
+```
+
+Other useful commands:
+
+```bash
+# View logs (web service)
+docker compose logs -f web
+
+# Rebuild and restart after pulling new code, without touching the db volume
+docker compose up -d --build
+
+# Create an admin user
+docker compose exec web python manage.py createsuperuser
+
+# Stop and remove containers/network (keeps volumes — db data & media persist)
+docker compose down
+
+# Stop and remove containers/network AND volumes (wipes db data & uploaded media)
+docker compose down -v
+```
 
 ## Local development (without Docker)
 

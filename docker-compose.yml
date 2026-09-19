@@ -9,6 +9,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gis_user -d gis_app"]
       interval: 5s
@@ -24,7 +25,8 @@ services:
       - .:/app
       - media_data:/app/media
     ports:
-      - "8000:8000"
+      - "6000:6000"
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -34,6 +36,7 @@ services:
     command: ["postgresql://gis_user:gis_password@db:5432/gis_app"]
     ports:
       - "3000:3000"
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
