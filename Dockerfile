@@ -21,10 +21,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /app/staticfiles /app/media
-RUN chmod +x /app/entrypoint.sh
+RUN mkdir -p /app/staticfiles /app/media \
+    && chmod +x /app/entrypoint.sh \
+    && sed -i 's/\r$//' /app/entrypoint.sh
 
-EXPOSE 6000
+# Container listens on 8000; host maps 8001:8000 in docker-compose.prod.yml
+EXPOSE 8000
 
 ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:6000", "--workers", "3"]
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "600", "--access-logfile", "-", "--error-logfile", "-"]

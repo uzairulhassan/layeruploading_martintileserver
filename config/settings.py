@@ -16,6 +16,7 @@ environ.Env.read_env(BASE_DIR / ".env")
 SECRET_KEY = env("SECRET_KEY", default="insecure-dev-key-change-me")
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -110,6 +111,15 @@ LOGIN_URL = "core:login"
 LOGIN_REDIRECT_URL = "core:dashboard"
 LOGOUT_REDIRECT_URL = "core:login"
 
+# Production hardening (safe defaults; HTTPS flags stay off until TLS is fronted)
+if not DEBUG:
+    SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=False)
+    CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=False)
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"
+    SECURE_REFERRER_POLICY = "same-origin"
+
 # ---------------------------------------------------------------------------
 # Django REST Framework / SimpleJWT
 # ---------------------------------------------------------------------------
@@ -153,4 +163,6 @@ OGR2OGR_PATH = env("OGR2OGR_PATH", default="ogr2ogr")
 
 # Shapefiles are uploaded as a single .zip containing .shp/.shx/.dbf/.prj (+ optional .cpg/.qpj)
 MAX_SHAPEFILE_UPLOAD_SIZE = env.int("MAX_SHAPEFILE_UPLOAD_SIZE", default=200 * 1024 * 1024)  # 200MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_SHAPEFILE_UPLOAD_SIZE
+FILE_UPLOAD_MAX_MEMORY_SIZE = min(MAX_SHAPEFILE_UPLOAD_SIZE, 10 * 1024 * 1024)
 LAYER_TABLE_SCHEMA = env("LAYER_TABLE_SCHEMA", default="layers_data")

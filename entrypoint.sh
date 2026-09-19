@@ -11,10 +11,11 @@ import environ
 import psycopg2
 
 env = environ.Env()
-environ.Env.read_env("/app/.env")
+# Docker Compose env vars take precedence over values in .env
+environ.Env.read_env("/app/.env", overwrite=False)
 db = env.db_url("DATABASE_URL")
 
-for attempt in range(30):
+for attempt in range(60):
     try:
         psycopg2.connect(
             dbname=db["NAME"], user=db["USER"], password=db["PASSWORD"],

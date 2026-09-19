@@ -20,7 +20,7 @@ media/*
 !media/.gitkeep
 staticfiles/
 
-# Env
+# Env (never commit real secrets)
 .env
 .env.*
 !.env.example
@@ -35,6 +35,3 @@ staticfiles/
 
 # Uploaded shapefile temp extraction
 tmp_uploads/
-/apps/accounts/migrations/
-/apps/layers/migrations/
-/apps/maps/migrations/
