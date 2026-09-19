@@ -120,11 +120,41 @@ async function deleteLayer(layer) {
 }
 
 // ---- Style & labels ----
+function normalizeHexColor(value, fallback) {
+  const raw = String(value || "").trim();
+  if (/^#[0-9a-fA-F]{6}$/.test(raw)) return raw.toLowerCase();
+  if (/^#[0-9a-fA-F]{3}$/.test(raw)) {
+    return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`.toLowerCase();
+  }
+  return fallback;
+}
+
+function setColorPair(textId, pickerId, value, fallback) {
+  const hex = normalizeHexColor(value, fallback);
+  document.getElementById(textId).value = hex;
+  document.getElementById(pickerId).value = hex;
+}
+
+function bindColorPair(textId, pickerId, fallback) {
+  const text = document.getElementById(textId);
+  const picker = document.getElementById(pickerId);
+  picker.addEventListener("input", () => {
+    text.value = picker.value;
+  });
+  text.addEventListener("input", () => {
+    const hex = normalizeHexColor(text.value, "");
+    if (hex) picker.value = hex;
+  });
+  text.addEventListener("blur", () => {
+    setColorPair(textId, pickerId, text.value, fallback);
+  });
+}
+
 function openStyleModal(layer) {
   document.getElementById("style-id").value = layer.id;
   const style = layer.style || {};
-  document.getElementById("style-fill-color").value = style.color || "#0F2D53";
-  document.getElementById("style-stroke-color").value = style.strokeColor || "#0a2140";
+  setColorPair("style-fill-color", "style-fill-color-picker", style.color, "#0F2D53");
+  setColorPair("style-stroke-color", "style-stroke-color-picker", style.strokeColor, "#0a2140");
   document.getElementById("style-stroke-width").value = style.strokeWidth ?? 1;
   document.getElementById("style-opacity").value = style.opacity ?? 0.6;
 
@@ -135,7 +165,7 @@ function openStyleModal(layer) {
 
   const labelConfig = layer.label_config || {};
   labelSelect.value = labelConfig.field || "";
-  document.getElementById("label-color").value = labelConfig.color || "#0F2D53";
+  setColorPair("label-color", "label-color-picker", labelConfig.color, "#0F2D53");
   document.getElementById("label-size").value = labelConfig.size || 12;
 
   const canEdit = layer.my_permission === "owner" || layer.my_permission === "edit";
@@ -151,14 +181,14 @@ document.getElementById("style-form").addEventListener("submit", async (event) =
   const id = document.getElementById("style-id").value;
   const payload = {
     style: {
-      color: document.getElementById("style-fill-color").value,
-      strokeColor: document.getElementById("style-stroke-color").value,
+      color: normalizeHexColor(document.getElementById("style-fill-color").value, "#0F2D53"),
+      strokeColor: normalizeHexColor(document.getElementById("style-stroke-color").value, "#0a2140"),
       strokeWidth: parseFloat(document.getElementById("style-stroke-width").value || "1"),
       opacity: parseFloat(document.getElementById("style-opacity").value || "0.6"),
     },
     label_config: {
       field: document.getElementById("label-field").value,
-      color: document.getElementById("label-color").value,
+      color: normalizeHexColor(document.getElementById("label-color").value, "#0F2D53"),
       size: parseInt(document.getElementById("label-size").value || "12", 10),
     },
   };
@@ -246,4 +276,9 @@ document.getElementById("share-submit").addEventListener("click", async () => {
   document.getElementById("share-search").value = "";
 });
 
-document.addEventListener("DOMContentLoaded", loadLayers);
+document.addEventListener("DOMContentLoaded", () => {
+  bindColorPair("style-fill-color", "style-fill-color-picker", "#0F2D53");
+  bindColorPair("style-stroke-color", "style-stroke-color-picker", "#0a2140");
+  bindColorPair("label-color", "label-color-picker", "#0F2D53");
+  loadLayers();
+});

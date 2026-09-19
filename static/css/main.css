@@ -427,6 +427,37 @@ hr {
   font-size: 0.85rem;
 }
 
+.color-field {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.color-field input[type="color"] {
+  flex: 0 0 2.5rem;
+  width: 2.5rem;
+  height: 2.35rem;
+  padding: 0;
+  border: 1px solid var(--navy-line-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+}
+
+.color-field input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.color-field input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: 1px;
+}
+
+.color-field input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
 /* —— Tables —— */
 .data-table-wrap {
   width: 100%;

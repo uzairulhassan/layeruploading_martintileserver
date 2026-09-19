@@ -81,11 +81,17 @@
       <input type="hidden" id="style-id">
       <div class="form-group">
         <label for="style-fill-color">Fill / line color</label>
-        <input type="text" id="style-fill-color" placeholder="#0F2D53">
+        <div class="color-field">
+          <input type="color" id="style-fill-color-picker" value="#0F2D53" aria-label="Pick fill / line color">
+          <input type="text" id="style-fill-color" placeholder="#0F2D53" spellcheck="false">
+        </div>
       </div>
       <div class="form-group">
         <label for="style-stroke-color">Stroke color</label>
-        <input type="text" id="style-stroke-color" placeholder="#0a2140">
+        <div class="color-field">
+          <input type="color" id="style-stroke-color-picker" value="#0a2140" aria-label="Pick stroke color">
+          <input type="text" id="style-stroke-color" placeholder="#0a2140" spellcheck="false">
+        </div>
       </div>
       <div class="form-group">
         <label for="style-stroke-width">Stroke width (px)</label>
@@ -102,7 +108,10 @@
       </div>
       <div class="form-group">
         <label for="label-color">Label text color</label>
-        <input type="text" id="label-color" placeholder="#0F2D53">
+        <div class="color-field">
+          <input type="color" id="label-color-picker" value="#0F2D53" aria-label="Pick label text color">
+          <input type="text" id="label-color" placeholder="#0F2D53" spellcheck="false">
+        </div>
       </div>
       <div class="form-group">
         <label for="label-size">Label size (px)</label>
