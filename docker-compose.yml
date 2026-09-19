@@ -31,16 +31,6 @@ services:
       db:
         condition: service_healthy
 
-  martin:
-    image: ghcr.io/maplibre/martin:v0.14.0
-    command: ["postgresql://gis_user:gis_password@db:5432/gis_app"]
-    ports:
-      - "3000:3000"
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-
 volumes:
   postgres_data:
   media_data:

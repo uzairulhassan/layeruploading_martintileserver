@@ -72,37 +72,40 @@ Layer/map access itself is owner + explicit-share based:
 
 ```bash
 cp .env.example .env
-# edit .env: set MAPBOX_ACCESS_TOKEN at minimum
+# edit .env: set MAPBOX_ACCESS_TOKEN and MARTIN_TILE_SERVER_URL
 
 docker compose up --build
 ```
 
-- App: http://localhost:6000
-- Martin tile server: http://localhost:3000
-- Create an admin user: `docker compose exec web python manage.py createsuperuser`
+`docker-compose.yml` only starts `db` and `web` — Martin runs separately
+(its own binary/container/service) against the same database. Point
+`MARTIN_TILE_SERVER_URL` in `.env` at wherever that instance is reachable.
+See `martin/config.example.yaml` if you'd rather pin it to an explicit config
+instead of Martin's default auto-discovery (any spatial table, including
+each new `layers_data.layer_<uuid>` table, is served automatically either way).
 
-Martin is started with just a connection string (see `docker-compose.yml`),
-so it auto-discovers every table in the database, including each new
-`layers_data.layer_<uuid>` table as soon as it's created — nothing to restart.
-See `martin/config.example.yaml` if you'd rather pin it to an explicit config.
+- App: http://localhost:6000
+- Create an admin user: `docker compose exec web python manage.py createsuperuser`
 
 ## Server deployment (Docker)
 
 The app is served on **port 6000** (see `Dockerfile` / `docker-compose.yml`).
-Before deploying, make sure `.env` on the server has `DEBUG=False` and
-`ALLOWED_HOSTS` set to your domain/IP (e.g. `ALLOWED_HOSTS=your-server-ip,your-domain.com`).
+This compose file only manages `db` and `web` — Martin is assumed to already
+be running on the server as its own service, so make sure `.env`'s
+`MARTIN_TILE_SERVER_URL` points at it. Also set `DEBUG=False` and
+`ALLOWED_HOSTS` to your domain/IP (e.g. `ALLOWED_HOSTS=your-server-ip,your-domain.com`).
 
 ```bash
 # 1. Copy the repo to the server and configure environment
 cp .env.example .env
-# edit .env: DEBUG=False, ALLOWED_HOSTS, MAPBOX_ACCESS_TOKEN, DATABASE_URL, etc.
+# edit .env: DEBUG=False, ALLOWED_HOSTS, MAPBOX_ACCESS_TOKEN, DATABASE_URL,
+#            MARTIN_TILE_SERVER_URL (pointing at the already-running Martin), etc.
 
-# 2. Build images and start all services (db, web, martin) in the background
+# 2. Build images and start db + web in the background
 docker compose up -d --build
 ```
 
 - App: `http://<server-ip>:6000`
-- Martin tile server: `http://<server-ip>:3000`
 
 Database migrations and `collectstatic` run automatically on container start
 (see `entrypoint.sh`), so no separate migration step is required after
