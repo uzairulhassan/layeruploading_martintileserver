@@ -1,20 +1,16 @@
-# Optional Martin configuration.
-#
-# By default docker-compose.yml / docker-compose.prod.yml run Martin with just a
-# database connection string, which auto-discovers every spatial table
-# (including dynamic `layers_data.layer_<uuid>` tables created on upload) and
-# publishes each one as a vector tile source at /<table_name>.
-#
-# If you need more control (restrict to a schema, tune extents/buffers, add
-# functions as sources, etc.) copy this file to config.yaml, adjust it, and
-# point the martin service at it instead, e.g.:
-#
-#   command: ["--config", "/config/config.yaml"]
-#   volumes:
-#     - ./martin/config.yaml:/config/config.yaml:ro
+# Reference Martin config for non-Docker runs (Martin v0.18.x keys).
+# Docker Compose uses martin/entrypoint.sh instead of this file.
+
+listen_addresses: "0.0.0.0:3000"
+worker_processes: 2
+cache_size_mb: 64
+preferred_encoding: gzip
+web_ui: disable
 
 postgres:
-  connection_string: "postgresql://gis_user:gis_password@db:5432/gis_app"
+  connection_string: "postgresql://gis_user:gis_password@localhost:5432/gis_app"
+  pool_size: 5
+  auto_bounds: skip
   auto_publish:
     from_schemas:
       - layers_data

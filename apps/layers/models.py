@@ -57,10 +57,6 @@ class LayerInfo(models.Model):
     def __str__(self):
         return self.name
 
-    @property
-    def qualified_table_name(self) -> str:
-        return f"{self.schema_name}.{self.table_name}"
-
 
 class LayerShare(models.Model):
     class Permission(models.TextChoices):

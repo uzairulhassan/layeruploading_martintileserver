@@ -3,6 +3,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from .martin import ensure_martin_source
 from .models import LayerInfo, LayerShare
 from .permissions import IsOwnerOrSharedWithPermission
 from .serializers import LayerInfoSerializer, LayerShareSerializer, LayerUploadSerializer
@@ -37,11 +38,18 @@ class LayerViewSet(viewsets.ModelViewSet):
         except ShapefileImportError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Ensure Martin serves the new table before the client starts fetching tiles.
+        ensure_martin_source(layer.table_name)
+
         output = LayerInfoSerializer(layer, context=self.get_serializer_context())
         return Response(output.data, status=status.HTTP_201_CREATED)
 
     def perform_destroy(self, instance):
+        from .martin import restart_martin_container
+
         delete_layer(instance)
+        restart_martin_container()
+
 
     @action(detail=True, methods=["post"])
     def share(self, request, pk=None):

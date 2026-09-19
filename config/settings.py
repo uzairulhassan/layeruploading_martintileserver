@@ -30,7 +30,6 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
-    "django_filters",
     # Local apps
     "apps.accounts",
     "apps.layers",
@@ -130,9 +129,6 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
-    "DEFAULT_FILTER_BACKENDS": (
-        "django_filters.rest_framework.DjangoFilterBackend",
-    ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 25,
     "DEFAULT_PARSER_CLASSES": (
@@ -158,6 +154,13 @@ SIMPLE_JWT = {
 # ---------------------------------------------------------------------------
 MAPBOX_ACCESS_TOKEN = env("MAPBOX_ACCESS_TOKEN", default="")
 MARTIN_TILE_SERVER_URL = env("MARTIN_TILE_SERVER_URL", default="http://localhost:3000")
+# Reachable from the web container (Docker service name), used to wait for catalog publish.
+MARTIN_INTERNAL_URL = env("MARTIN_INTERNAL_URL", default="http://martin:3000")
+MARTIN_READY_TIMEOUT = env.int("MARTIN_READY_TIMEOUT", default=90)
+MARTIN_READY_POLL_SECONDS = env.float("MARTIN_READY_POLL_SECONDS", default=2.0)
+# Optional: restart Martin via mounted docker.sock after upload/delete (cost-efficient).
+MARTIN_DOCKER_CONTAINER = env("MARTIN_DOCKER_CONTAINER", default="")
+DOCKER_SOCKET = env("DOCKER_SOCKET", default="/var/run/docker.sock")
 OGR2OGR_PATH = env("OGR2OGR_PATH", default="ogr2ogr")
 
 # Shapefiles are uploaded as a single .zip containing .shp/.shx/.dbf/.prj (+ optional .cpg/.qpj)

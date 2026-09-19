@@ -74,7 +74,6 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all().order_by("username")
     serializer_class = UserSummarySerializer
     permission_classes = [permissions.IsAuthenticated]
-    filterset_fields: list = []
     search_param = "search"
 
     def get_queryset(self):

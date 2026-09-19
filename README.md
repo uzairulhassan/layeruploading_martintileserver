@@ -14,8 +14,8 @@ rendered with Mapbox GL JS and tiled by [Martin](https://martin.maplibre.org/).
 - **PostgreSQL + PostGIS** — stores app metadata *and* the dynamically created
   per-layer geometry tables
 - **GDAL/`ogr2ogr`** — imports each uploaded shapefile into its own PostGIS table
-- **Martin** — auto-discovers every PostGIS table with a geometry column and
-  serves it as vector tiles, no manual tile-source configuration required
+- **Martin** — publishes `layers_data.layer_*` tables as vector tiles (catalog
+  reloads every few seconds so new uploads are tile-ready quickly)
 - **Mapbox GL JS** — basemap + vector tile rendering in the browser
 
 ## Architecture
@@ -28,6 +28,7 @@ apps/
   core/      Template views (dashboard, layer manager, map builder) + nav shell
 templates/   Django templates (base shell, login, dashboard, layers, maps)
 static/      Vanilla JS/CSS frontend (JWT wrapper, layer manager, map builder)
+martin/      Entrypoint that generates Martin's runtime config for Compose
 ```
 
 ### How a shapefile becomes a map layer
@@ -38,15 +39,15 @@ static/      Vanilla JS/CSS frontend (JWT wrapper, layer manager, map builder)
 3. The table's geometry type, feature count, bounding box and attribute schema
    are introspected from PostGIS and stored on a `LayerInfo` row (the metadata
    record — this is where style/label config and sharing live).
-4. Martin, running against the same database, automatically publishes that
-   table as vector tiles at `MARTIN_TILE_SERVER_URL/layer_<uuid>/{z}/{x}/{y}` —
-   no registration step needed.
+4. Martin publishes that table as vector tiles at
+   `MARTIN_TILE_SERVER_URL/layer_<uuid>/{z}/{x}/{y}`. The upload API waits
+   until Martin's catalog lists the new source before returning.
 5. The Layers **Share** dialog exposes a live XYZ template
    (`xyz_url`, `source_layer`, `suggested_geometry` on the API) for any
    external client that can consume XYZ / MVT tiles.
 6. The map builder adds it as a `vector` source in Mapbox GL JS using that URL
    and styles it (fill/line/circle + optional text labels) from `LayerInfo.style`
-   / `LayerInfo.label_config`.
+   / `LayerInfo.label_config`, then fits the viewport to layer bounds.
 
 ### Auth model
 
@@ -75,78 +76,70 @@ Layer/map access itself is owner + explicit-share based:
 
 ```bash
 cp .env.example .env
-# edit .env: set MAPBOX_ACCESS_TOKEN and MARTIN_TILE_SERVER_URL
+# edit .env: set MAPBOX_ACCESS_TOKEN (and secrets as needed)
 
 docker compose up --build
 ```
 
-`docker-compose.yml` only starts `db` and `web` — Martin runs separately
-(its own binary/container/service) against the same database. Point
-`MARTIN_TILE_SERVER_URL` in `.env` at wherever that instance is reachable.
-See `martin/config.example.yaml` if you'd rather pin it to an explicit config
-instead of Martin's default auto-discovery (any spatial table, including
-each new `layers_data.layer_<uuid>` table, is served automatically either way).
+Compose starts **db**, **web**, and **martin** together:
 
-- App: http://localhost:6000
-- Create an admin user: `docker compose exec web python manage.py createsuperuser`
+| Service | Host URL / port |
+| --- | --- |
+| App (UI + API) | http://localhost:8000 |
+| Martin tiles | http://localhost:3000 |
+| PostGIS | localhost:5432 |
 
-## Server deployment (Docker)
+**Cost-lean Martin defaults** (see `martin/entrypoint.sh`):
 
-The app is served on **port 6000** (see `Dockerfile` / `docker-compose.yml`).
-This compose file only manages `db` and `web` — Martin is assumed to already
-be running on the server as its own service, so make sure `.env`'s
-`MARTIN_TILE_SERVER_URL` points at it. Also set `DEBUG=False` and
-`ALLOWED_HOSTS` to your domain/IP (e.g. `ALLOWED_HOSTS=your-server-ip,your-domain.com`).
-
-```bash
-# 1. Copy the repo to the server and configure environment
-cp .env.example .env
-# edit .env: DEBUG=False, ALLOWED_HOSTS, MAPBOX_ACCESS_TOKEN, DATABASE_URL,
-#            MARTIN_TILE_SERVER_URL (pointing at the already-running Martin), etc.
-
-# 2. Build images and start db + web in the background
-docker compose up -d --build
-```
-
-- App: `http://<server-ip>:6000`
-
-Database migrations and `collectstatic` run automatically on container start
-(see `entrypoint.sh`), so no separate migration step is required after
-`up -d`. To run migrations manually (e.g. after pulling new code into an
-already-running stack):
+- Tile cache **64MB** (not Martin’s ~512MB default)
+- **2** HTTP workers (not 8)
+- Postgres pool **5** (not 20)
+- Catalog refresh **on upload/delete only** (Django restarts Martin via `docker.sock`)
+- `auto_bounds: skip` (map fitBounds uses Django layer bounds)
+- Soft `mem_limit: 256m` on the Martin container
 
 ```bash
-docker compose exec web python manage.py migrate
-```
-
-Other useful commands:
-
-```bash
-# View logs (web service)
-docker compose logs -f web
-
-# Rebuild and restart after pulling new code, without touching the db volume
-docker compose up -d --build
-
-# Create an admin user
 docker compose exec web python manage.py createsuperuser
+```
 
-# Stop and remove containers/network (keeps volumes — db data & media persist)
-docker compose down
+## Production (Docker)
 
-# Stop and remove containers/network AND volumes (wipes db data & uploaded media)
-docker compose down -v
+Use `docker-compose.prod.yml` (project name `geolayers`):
+
+| Service | Host port |
+| --- | --- |
+| App | **8001** → container 8000 |
+| Martin | **3002** → container 3000 |
+| PostGIS | **5435** → container 5432 |
+
+```bash
+cd /home/layeruploading_martintileserver   # or your deploy path
+cp .env.example .env   # first time only; then edit for production
+# Required: DEBUG=False, SECRET_KEY, ALLOWED_HOSTS, POSTGRES_PASSWORD,
+# MAPBOX_ACCESS_TOKEN, MARTIN_TILE_SERVER_URL=http://<public-host>:3002
+
+docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+```
+
+Migrations and `collectstatic` run on web container start (`entrypoint.sh`).
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f web
+docker compose -f docker-compose.prod.yml exec web python manage.py createsuperuser
+docker compose -f docker-compose.prod.yml up -d --build web martin
+docker compose -f docker-compose.prod.yml down      # keeps volumes
+docker compose -f docker-compose.prod.yml down -v   # wipes db + media
 ```
 
 ## Local development (without Docker)
 
-Requirements: Python 3.12, PostgreSQL + PostGIS extension, GDAL (`ogr2ogr` on
-your `PATH`), and a running Martin binary/service.
+Requirements: Python 3.12, PostgreSQL + PostGIS, GDAL (`ogr2ogr` on `PATH`),
+and Martin.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env  # point DATABASE_URL at your local PostGIS instance
+cp .env.example .env  # point DATABASE_URL at local PostGIS; set MARTIN_INTERNAL_URL if needed
 
 python manage.py migrate
 python manage.py createsuperuser
@@ -154,21 +147,27 @@ python manage.py collectstatic --noinput
 python manage.py runserver
 ```
 
-Run Martin separately against the same database, e.g.:
+Run Martin separately, e.g.:
 
 ```bash
-martin postgresql://gis_user:gis_password@localhost:5432/gis_app
+# edit connection_string in martin/config.example.yaml first
+martin --config martin/config.example.yaml
+# or:  martin postgresql://gis_user:gis_password@localhost:5432/gis_app
 ```
 
 ## Key environment variables (`.env`)
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | PostGIS connection string, shared with Martin |
-| `MAPBOX_ACCESS_TOKEN` | Basemap token used by Mapbox GL JS in templates |
-| `MARTIN_TILE_SERVER_URL` | Base URL the browser uses to fetch vector tiles |
-| `OGR2OGR_PATH` | Path to the `ogr2ogr` binary (defaults to `ogr2ogr` on `PATH`) |
+| `DATABASE_URL` | PostGIS connection string for Django |
+| `MAPBOX_ACCESS_TOKEN` | Basemap token for Mapbox GL JS |
+| `MARTIN_TILE_SERVER_URL` | Browser-facing Martin base URL |
+| `MARTIN_INTERNAL_URL` | Django→Martin URL inside Docker (default `http://martin:3000`) |
+| `MARTIN_READY_TIMEOUT` | Seconds to wait for Martin catalog after upload (default 90) |
+| `MARTIN_DOCKER_CONTAINER` | Container name for on-demand restart (compose sets `geolayers-martin`) |
+| `OGR2OGR_PATH` | Path to `ogr2ogr` (default `ogr2ogr`) |
 | `ACCESS_TOKEN_LIFETIME_MINUTES` / `REFRESH_TOKEN_LIFETIME_DAYS` | JWT lifetimes |
+| `POSTGRES_*` | Used by prod compose for the `db` service |
 
 ## API overview
 
@@ -180,9 +179,3 @@ martin postgresql://gis_user:gis_password@localhost:5432/gis_app
 | `CRUD /api/auth/roles/` | Role & permission management |
 | `CRUD /api/layers/`, `POST /api/layers/{id}/share/`, `/unshare/` | Layer upload (multipart), styling, sharing |
 | `CRUD /api/maps/`, `GET/POST /api/maps/{id}/layers/`, `PATCH/DELETE /api/maps/{id}/layers/{map_layer_id}/`, `POST /api/maps/{id}/reorder/`, `/share/`, `/unshare/` | Map composition & sharing |
-
-## Tests
-
-```bash
-python manage.py test
-```

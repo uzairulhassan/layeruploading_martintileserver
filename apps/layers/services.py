@@ -2,8 +2,9 @@
 
 Uploaded shapefiles (as a .zip containing .shp/.shx/.dbf/.prj) are imported
 with ogr2ogr into a brand-new, uniquely-named table in the ``LAYER_TABLE_SCHEMA``
-schema. Martin auto-discovers any spatial table in the database and serves it
-as vector tiles, so no further wiring is required once the table exists.
+schema (default ``layers_data``). Martin is configured to auto-publish tables
+from that schema as vector tiles, so no further wiring is required once the
+table exists and Martin's catalog reload has picked it up.
 """
 import subprocess
 import tempfile
@@ -74,6 +75,17 @@ def _generate_table_name() -> str:
 def _ensure_schema_exists(schema_name: str):
     with connection.cursor() as cursor:
         cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"')
+
+
+def _ensure_spatial_index(schema_name: str, table_name: str):
+    """GIST index speeds Martin tile queries on large layers."""
+    index_name = f"{table_name}_geom_idx"
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f'CREATE INDEX IF NOT EXISTS "{index_name}" '
+            f'ON "{schema_name}"."{table_name}" USING GIST (geom)'
+        )
+        cursor.execute(f'ANALYZE "{schema_name}"."{table_name}"')
 
 
 def _run_ogr2ogr(shp_path: Path, schema_name: str, table_name: str):
@@ -147,7 +159,7 @@ def _drop_table(schema_name: str, table_name: str):
         cursor.execute(f'DROP TABLE IF EXISTS "{schema_name}"."{table_name}" CASCADE')
 
 
-def import_shapefile(*, owner, name: str, description: str, uploaded_file, default_style: dict | None = None) -> LayerInfo:
+def import_shapefile(*, owner, name: str, description: str, uploaded_file) -> LayerInfo:
     """Extracts an uploaded .zip shapefile and imports it into a new PostGIS table."""
     schema_name = settings.LAYER_TABLE_SCHEMA
     table_name = _generate_table_name()
@@ -165,6 +177,7 @@ def import_shapefile(*, owner, name: str, description: str, uploaded_file, defau
 
         _ensure_schema_exists(schema_name)
         _run_ogr2ogr(shp_path, schema_name, table_name)
+        _ensure_spatial_index(schema_name, table_name)
 
     try:
         metadata = _introspect_table(schema_name, table_name)
@@ -176,7 +189,7 @@ def import_shapefile(*, owner, name: str, description: str, uploaded_file, defau
                 schema_name=schema_name,
                 table_name=table_name,
                 source_filename=getattr(uploaded_file, "name", ""),
-                style=default_style or {},
+                style={},
                 **metadata,
             )
     except Exception:

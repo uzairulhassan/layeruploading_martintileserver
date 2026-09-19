@@ -26,28 +26,39 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgis://${POSTGRES_USER:-gis_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-gis_app}
+      MARTIN_INTERNAL_URL: http://martin:3000
+      MARTIN_DOCKER_CONTAINER: geolayers-martin
     volumes:
       - media_data:/app/media
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8001:8000"
     depends_on:
       db:
         condition: service_healthy
+      martin:
+        condition: service_started
     networks:
       - geolayers_net
 
   martin:
-    image: ghcr.io/maplibre/martin:v0.14.0
+    image: ghcr.io/maplibre/martin:v0.18.1
+    container_name: geolayers-martin
     restart: unless-stopped
-    command:
-      - "--listen-addresses"
-      - "0.0.0.0:3000"
-      - "postgresql://${POSTGRES_USER:-gis_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-gis_app}"
+    entrypoint: ["/bin/sh", "/config/entrypoint.sh"]
+    environment:
+      MARTIN_DATABASE_URL: postgresql://${POSTGRES_USER:-gis_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-gis_app}
+      MARTIN_CACHE_MB: "64"
+      MARTIN_POOL_SIZE: "5"
+      MARTIN_WORKERS: "2"
+    volumes:
+      - ./martin/entrypoint.sh:/config/entrypoint.sh:ro
     ports:
       - "3002:3000"
     depends_on:
       db:
         condition: service_healthy
+    mem_limit: 256m
     networks:
       - geolayers_net
 

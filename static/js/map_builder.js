@@ -12,7 +12,19 @@ document.querySelectorAll("[data-close-modal]").forEach((btn) => {
 });
 
 function tableNameFromTileUrl(tileUrl) {
-  return tileUrl.split("/").filter(Boolean).pop();
+  return (tileUrl || "").split("/").filter(Boolean).pop();
+}
+
+function sourceLayerName(layer) {
+  return layer.source_layer || tableNameFromTileUrl(layer.tile_url);
+}
+
+function hasUsableBounds(bounds) {
+  return (
+    Array.isArray(bounds) &&
+    bounds.length === 4 &&
+    bounds.every((v) => typeof v === "number" && Number.isFinite(v))
+  );
 }
 
 async function init() {
@@ -75,12 +87,9 @@ async function loadMap() {
     GL_MAP.addControl(new mapboxgl.NavigationControl(), "top-right");
     GL_MAP.on("load", () => {
       renderMapLayers();
-      // New maps default to 0,0 / zoom 2 — zoom to layer extents when available
-      const stillDefaultView =
-        Math.abs(MAP_DATA.center_lng) < 0.01 &&
-        Math.abs(MAP_DATA.center_lat) < 0.01 &&
-        MAP_DATA.zoom <= 3;
-      if (stillDefaultView) fitMapToLayers({ animate: true });
+      // Always frame layer extents when the map still has the create defaults,
+      // or when layers exist but the saved view is empty ocean (0,0).
+      if (shouldAutoFitOnLoad()) fitMapToLayers({ animate: true });
     });
   } else {
     renderMapLayers();
@@ -169,9 +178,19 @@ function renderAvailableLayers() {
 }
 
 async function addLayerToMap(layerId) {
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/`, { method: "POST", body: { layer: layerId } });
+  const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/`, {
+    method: "POST",
+    body: { layer: layerId },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    alert(body.detail || "Could not add layer to map.");
+    return;
+  }
   await refreshAfterLayerChange();
+  // Fit immediately, then once more after the style/sources settle.
   fitMapToLayers({ preferLayerId: layerId });
+  window.setTimeout(() => fitMapToLayers({ preferLayerId: layerId, animate: true }), 400);
 }
 
 async function removeMapLayer(mapLayerId) {
@@ -179,24 +198,32 @@ async function removeMapLayer(mapLayerId) {
   await refreshAfterLayerChange();
 }
 
+function shouldAutoFitOnLoad() {
+  if (!MAP_DATA?.map_layers?.length) return false;
+  const nearNullIsland =
+    Math.abs(MAP_DATA.center_lng) < 0.01 && Math.abs(MAP_DATA.center_lat) < 0.01;
+  const lowZoom = (MAP_DATA.zoom ?? 0) <= 3;
+  return nearNullIsland || lowZoom;
+}
+
 function fitMapToLayers({ preferLayerId = null, animate = true } = {}) {
-  if (!GL_MAP || !MAP_DATA) return;
+  if (!GL_MAP || !MAP_DATA) return false;
 
   let boundsList = [];
   if (preferLayerId) {
     const preferred = MAP_DATA.map_layers.find(
       (ml) => String(ml.layer_detail.id) === String(preferLayerId)
     );
-    if (preferred?.layer_detail?.bounds?.length === 4) {
+    if (hasUsableBounds(preferred?.layer_detail?.bounds)) {
       boundsList = [preferred.layer_detail.bounds];
     }
   }
   if (!boundsList.length) {
     boundsList = MAP_DATA.map_layers
       .map((ml) => ml.layer_detail?.bounds)
-      .filter((b) => Array.isArray(b) && b.length === 4);
+      .filter(hasUsableBounds);
   }
-  if (!boundsList.length) return;
+  if (!boundsList.length) return false;
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   boundsList.forEach(([x1, y1, x2, y2]) => {
@@ -205,16 +232,21 @@ function fitMapToLayers({ preferLayerId = null, animate = true } = {}) {
     maxX = Math.max(maxX, x1, x2);
     maxY = Math.max(maxY, y1, y2);
   });
-  if (![minX, minY, maxX, maxY].every(Number.isFinite)) return;
-  if (minX === maxX && minY === maxY) {
+  if (![minX, minY, maxX, maxY].every(Number.isFinite)) return false;
+
+  // Degenerate point extent
+  if (Math.abs(minX - maxX) < 1e-9 && Math.abs(minY - maxY) < 1e-9) {
     GL_MAP.flyTo({ center: [minX, minY], zoom: 12, essential: true });
-    return;
+    return true;
   }
 
+  // Tiny extents still need a sensible zoom
+  const pad = 48;
   GL_MAP.fitBounds(
     [[minX, minY], [maxX, maxY]],
-    { padding: 48, maxZoom: 14, duration: animate ? 900 : 0, essential: true }
+    { padding: pad, maxZoom: 16, duration: animate ? 900 : 0, essential: true }
   );
+  return true;
 }
 
 
@@ -250,10 +282,23 @@ function clearMapboxLayers() {
     const id = ADDED_MAPBOX_LAYER_IDS.pop();
     if (GL_MAP.getLayer(id)) GL_MAP.removeLayer(id);
   }
+  // Drop vector sources too so re-added layers always pick up fresh tile URLs
+  // (critical after delete + re-upload of the same logical dataset).
+  const style = GL_MAP.getStyle();
+  const sources = style?.sources || {};
+  Object.keys(sources).forEach((sourceId) => {
+    if (sourceId.startsWith("src-") && GL_MAP.getSource(sourceId)) {
+      GL_MAP.removeSource(sourceId);
+    }
+  });
 }
 
 function renderMapLayers() {
-  if (!GL_MAP || !GL_MAP.isStyleLoaded()) return;
+  if (!GL_MAP) return;
+  if (!GL_MAP.isStyleLoaded()) {
+    GL_MAP.once("style.load", () => renderMapLayers());
+    return;
+  }
   clearMapboxLayers();
 
   const sorted = [...MAP_DATA.map_layers].sort((a, b) => a.order - b.order);
@@ -262,21 +307,26 @@ function renderMapLayers() {
 
 function addMapboxLayer(mapLayer) {
   const layer = mapLayer.layer_detail;
-  const sourceId = `src-${layer.id}`;
-  const tableName = tableNameFromTileUrl(layer.tile_url);
+  if (!layer?.tile_url) return;
 
-  if (!GL_MAP.getSource(sourceId)) {
-    GL_MAP.addSource(sourceId, {
-      type: "vector",
-      tiles: [`${layer.tile_url}/{z}/{x}/{y}`],
-      minzoom: 0,
-      maxzoom: 22,
-    });
+  const sourceId = `src-${layer.id}`;
+  const tableName = sourceLayerName(layer);
+  if (!tableName) return;
+
+  if (GL_MAP.getSource(sourceId)) {
+    GL_MAP.removeSource(sourceId);
   }
 
-  const style = layer.style || {};
+  GL_MAP.addSource(sourceId, {
+    type: "vector",
+    tiles: [`${layer.tile_url.replace(/\/$/, "")}/{z}/{x}/{y}`],
+    minzoom: 0,
+    maxzoom: 22,
+  });
+
+  const style = { ...(layer.style || {}), ...(mapLayer.style_override || {}) };
   const visibility = mapLayer.visible ? "visible" : "none";
-  const geomType = layer.geometry_type;
+  const geomType = layer.geometry_type || "";
 
   if (geomType === "Point" || geomType === "MultiPoint") {
     const id = `layer-${mapLayer.id}-circle`;
@@ -305,6 +355,7 @@ function addMapboxLayer(mapLayer) {
     });
     ADDED_MAPBOX_LAYER_IDS.push(id);
   } else {
+    // Polygon / MultiPolygon / Geometry fallback — fill + outline covers most cases
     const id = `layer-${mapLayer.id}-fill`;
     const outlineId = `layer-${mapLayer.id}-outline`;
     GL_MAP.addLayer({
@@ -324,6 +375,21 @@ function addMapboxLayer(mapLayer) {
       },
     });
     ADDED_MAPBOX_LAYER_IDS.push(id, outlineId);
+
+    // If type is unknown Geometry, also add a line layer so road networks still show
+    if (geomType === "Geometry" || !geomType) {
+      const lineId = `layer-${mapLayer.id}-line-fallback`;
+      GL_MAP.addLayer({
+        id: lineId, source: sourceId, "source-layer": tableName, type: "line",
+        layout: { visibility },
+        paint: {
+          "line-color": style.color || "#0F2D53",
+          "line-width": style.strokeWidth ?? 2,
+          "line-opacity": mapLayer.opacity ?? style.opacity ?? 1,
+        },
+      });
+      ADDED_MAPBOX_LAYER_IDS.push(lineId);
+    }
   }
 
   const labelConfig = layer.label_config || {};

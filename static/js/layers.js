@@ -65,7 +65,7 @@ document.getElementById("upload-form").addEventListener("submit", async (event) 
   errorBox.classList.add("hidden");
   const submitBtn = document.getElementById("upload-submit");
   submitBtn.disabled = true;
-  submitBtn.textContent = "Uploading…";
+  submitBtn.textContent = "Importing…";
 
   const formData = new FormData();
   formData.append("name", document.getElementById("upload-name").value);
@@ -367,7 +367,7 @@ async function copyShareValue(kind, button) {
   clearTimeout(SHARE_COPY_RESET);
 
   try {
-    await navigator.clipboard.writeText(text);
+    await copyTextToClipboard(text);
     document.querySelectorAll(".xyz-copy-btn.is-copied").forEach((btn) => {
       btn.classList.remove("is-copied");
     });
@@ -382,6 +382,36 @@ async function copyShareValue(kind, button) {
     status.textContent = "Copy failed — select the text and copy manually.";
     status.classList.add("is-visible");
   }
+}
+
+/** Clipboard API needs a secure context (HTTPS/localhost). Fall back for plain HTTP hosts. */
+function copyTextToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.top = "0";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch (err) {
+      document.body.removeChild(textarea);
+      reject(err);
+      return;
+    }
+    document.body.removeChild(textarea);
+    if (ok) resolve();
+    else reject(new Error("execCommand copy failed"));
+  });
 }
 
 document.querySelectorAll("#share-panel-xyz [data-copy-value]").forEach((btn) => {

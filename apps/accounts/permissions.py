@@ -17,7 +17,6 @@ class CanManageRoles(BasePermission):
             "update": "accounts.change_role",
             "partial_update": "accounts.change_role",
             "destroy": "accounts.delete_role",
-            "assign": "accounts.change_role",
         }
         codename = action_perm_map.get(view.action)
         return bool(codename and user.has_role_permission(codename))

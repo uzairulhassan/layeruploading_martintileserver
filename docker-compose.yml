@@ -21,24 +21,41 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgis://gis_user:gis_password@db:5432/gis_app
+      MARTIN_INTERNAL_URL: http://martin:3000
+      # On-demand Martin restart (no continuous catalog polling)
+      MARTIN_DOCKER_CONTAINER: geolayers-martin
     volumes:
       - .:/app
       - media_data:/app/media
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8000:8000"
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
+      martin:
+        condition: service_started
 
   martin:
-    image: ghcr.io/maplibre/martin:v0.14.0
-    command: ["postgresql://gis_user:gis_password@db:5432/gis_app"]
+    image: ghcr.io/maplibre/martin:v0.18.1
+    container_name: geolayers-martin
+    entrypoint: ["/bin/sh", "/config/entrypoint.sh"]
+    environment:
+      MARTIN_DATABASE_URL: postgresql://gis_user:gis_password@db:5432/gis_app
+      MARTIN_CACHE_MB: "64"
+      MARTIN_POOL_SIZE: "5"
+      MARTIN_WORKERS: "2"
+    volumes:
+      - ./martin/entrypoint.sh:/config/entrypoint.sh:ro
     ports:
       - "3000:3000"
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
+    # Soft RAM hint for Docker (does not hard-kill; helps scheduling on small VPS)
+    mem_limit: 256m
 
 volumes:
   postgres_data:
