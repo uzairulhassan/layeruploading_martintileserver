@@ -26,5 +26,5 @@ RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 6000
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:6000", "--workers", "3"]

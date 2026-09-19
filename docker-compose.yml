@@ -22,7 +22,6 @@ services:
     environment:
       DATABASE_URL: postgis://gis_user:gis_password@db:5432/gis_app
     volumes:
-      - .:/app
       - media_data:/app/media
     ports:
       - "6000:6000"
