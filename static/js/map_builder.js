@@ -73,7 +73,15 @@ async function loadMap() {
       zoom: MAP_DATA.zoom,
     });
     GL_MAP.addControl(new mapboxgl.NavigationControl(), "top-right");
-    GL_MAP.on("load", renderMapLayers);
+    GL_MAP.on("load", () => {
+      renderMapLayers();
+      // New maps default to 0,0 / zoom 2 — zoom to layer extents when available
+      const stillDefaultView =
+        Math.abs(MAP_DATA.center_lng) < 0.01 &&
+        Math.abs(MAP_DATA.center_lat) < 0.01 &&
+        MAP_DATA.zoom <= 3;
+      if (stillDefaultView) fitMapToLayers({ animate: true });
+    });
   } else {
     renderMapLayers();
   }
@@ -163,12 +171,52 @@ function renderAvailableLayers() {
 async function addLayerToMap(layerId) {
   await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/`, { method: "POST", body: { layer: layerId } });
   await refreshAfterLayerChange();
+  fitMapToLayers({ preferLayerId: layerId });
 }
 
 async function removeMapLayer(mapLayerId) {
   await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "DELETE" });
   await refreshAfterLayerChange();
 }
+
+function fitMapToLayers({ preferLayerId = null, animate = true } = {}) {
+  if (!GL_MAP || !MAP_DATA) return;
+
+  let boundsList = [];
+  if (preferLayerId) {
+    const preferred = MAP_DATA.map_layers.find(
+      (ml) => String(ml.layer_detail.id) === String(preferLayerId)
+    );
+    if (preferred?.layer_detail?.bounds?.length === 4) {
+      boundsList = [preferred.layer_detail.bounds];
+    }
+  }
+  if (!boundsList.length) {
+    boundsList = MAP_DATA.map_layers
+      .map((ml) => ml.layer_detail?.bounds)
+      .filter((b) => Array.isArray(b) && b.length === 4);
+  }
+  if (!boundsList.length) return;
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  boundsList.forEach(([x1, y1, x2, y2]) => {
+    minX = Math.min(minX, x1, x2);
+    minY = Math.min(minY, y1, y2);
+    maxX = Math.max(maxX, x1, x2);
+    maxY = Math.max(maxY, y1, y2);
+  });
+  if (![minX, minY, maxX, maxY].every(Number.isFinite)) return;
+  if (minX === maxX && minY === maxY) {
+    GL_MAP.flyTo({ center: [minX, minY], zoom: 12, essential: true });
+    return;
+  }
+
+  GL_MAP.fitBounds(
+    [[minX, minY], [maxX, maxY]],
+    { padding: 48, maxZoom: 14, duration: animate ? 900 : 0, essential: true }
+  );
+}
+
 
 async function updateMapLayer(mapLayerId, payload) {
   await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "PATCH", body: payload });
