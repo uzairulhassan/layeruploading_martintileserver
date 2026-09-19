@@ -29,11 +29,10 @@ function renderLayers() {
       <td>${layer.owner_detail ? layer.owner_detail.display_name : ""}</td>
       <td><span class="badge">${layer.my_permission}</span></td>
       <td class="table-actions">
-        <button class="btn btn-sm" data-action="xyz" data-id="${layer.id}">XYZ link</button>
         <button class="btn btn-sm" data-action="style" data-id="${layer.id}">Style</button>
+        <button class="btn btn-sm" data-action="share" data-id="${layer.id}">Share</button>
         ${layer.my_permission === "owner" ? `
           <button class="btn btn-sm" data-action="rename" data-id="${layer.id}">Rename</button>
-          <button class="btn btn-sm" data-action="share" data-id="${layer.id}">Share</button>
           <button class="btn btn-sm btn-danger" data-action="delete" data-id="${layer.id}">Delete</button>
         ` : ""}
       </td>
@@ -51,7 +50,6 @@ function findLayer(id) {
 
 function handleRowAction(action, id) {
   const layer = findLayer(id);
-  if (action === "xyz") openXyzModal(layer);
   if (action === "style") openStyleModal(layer);
   if (action === "rename") openRenameModal(layer);
   if (action === "share") openShareModal(layer);
@@ -201,14 +199,88 @@ document.getElementById("style-form").addEventListener("submit", async (event) =
   }
 });
 
-// ---- Share ----
+// ---- Share (people + XYZ) ----
+let SHARE_COPY_RESET = null;
+let CURRENT_SHARE_LAYER = null;
+
+function setShareTab(tab) {
+  const peopleTab = document.getElementById("share-tab-people");
+  const xyzTab = document.getElementById("share-tab-xyz");
+  const peoplePanel = document.getElementById("share-panel-people");
+  const xyzPanel = document.getElementById("share-panel-xyz");
+  const isXyz = tab === "xyz";
+
+  peopleTab.classList.toggle("is-active", !isXyz);
+  xyzTab.classList.toggle("is-active", isXyz);
+  peopleTab.setAttribute("aria-selected", String(!isXyz));
+  xyzTab.setAttribute("aria-selected", String(isXyz));
+
+  peoplePanel.classList.toggle("is-active", !isXyz);
+  xyzPanel.classList.toggle("is-active", isXyz);
+  if (isXyz) {
+    peoplePanel.hidden = true;
+    xyzPanel.hidden = false;
+    xyzPanel.classList.add("is-entering");
+    window.setTimeout(() => xyzPanel.classList.remove("is-entering"), 280);
+  } else {
+    xyzPanel.hidden = true;
+    peoplePanel.hidden = false;
+    peoplePanel.classList.add("is-entering");
+    window.setTimeout(() => peoplePanel.classList.remove("is-entering"), 280);
+  }
+}
+
+function fillXyzShareFields(layer) {
+  const xyzUrl = layer.xyz_url || `${layer.tile_url}/{z}/{x}/{y}`;
+  const sourceLayer = layer.source_layer || "";
+  const geometry = layer.suggested_geometry || "line";
+
+  const urlEl = document.getElementById("xyz-url");
+  const sourceEl = document.getElementById("xyz-source-layer");
+  const geomEl = document.getElementById("xyz-geometry");
+
+  urlEl.textContent = "";
+  sourceEl.textContent = "";
+  geomEl.textContent = "";
+
+  // Reveal text with a short staggered “live” reveal.
+  window.requestAnimationFrame(() => {
+    urlEl.textContent = xyzUrl;
+    urlEl.classList.add("is-revealed");
+    sourceEl.textContent = sourceLayer;
+    sourceEl.classList.add("is-revealed");
+    geomEl.textContent = geometry;
+    geomEl.classList.add("is-revealed");
+  });
+
+  urlEl.dataset.copyText = xyzUrl;
+  sourceEl.dataset.copyText = sourceLayer;
+}
+
 function openShareModal(layer) {
+  CURRENT_SHARE_LAYER = layer;
   document.getElementById("share-layer-id").value = layer.id;
   document.getElementById("share-search").value = "";
   document.getElementById("share-results").innerHTML = "";
   document.getElementById("share-submit").disabled = true;
   SELECTED_SHARE_USER = null;
-  renderShareList(layer);
+
+  const isOwner = layer.my_permission === "owner";
+  document.getElementById("share-people-owner").classList.toggle("hidden", !isOwner);
+  document.getElementById("share-people-viewer").classList.toggle("hidden", isOwner);
+
+  document.querySelectorAll(".xyz-copy-btn.is-copied").forEach((btn) => {
+    btn.classList.remove("is-copied");
+  });
+  document.getElementById("xyz-copy-status").textContent = "";
+  document.getElementById("xyz-copy-status").classList.remove("is-visible");
+  document.getElementById("xyz-url").classList.remove("is-revealed");
+  document.getElementById("xyz-source-layer").classList.remove("is-revealed");
+  document.getElementById("xyz-geometry").classList.remove("is-revealed");
+
+  fillXyzShareFields(layer);
+  if (isOwner) renderShareList(layer);
+  setShareTab("people");
   openModal("share-modal");
 }
 
@@ -278,53 +350,42 @@ document.getElementById("share-submit").addEventListener("click", async () => {
   document.getElementById("share-search").value = "";
 });
 
-// ---- XYZ shareable link ----
-function buildGeotrakPackage(layer) {
-  return {
-    geotrakLayer: true,
-    name: layer.name || "",
-    type: "vector",
-    url: layer.xyz_url || `${layer.tile_url}/{z}/{x}/{y}`,
-    sourceLayer: layer.source_layer || "",
-    geometry: layer.suggested_geometry || "line",
-  };
-}
+document.querySelectorAll("[data-share-tab]").forEach((btn) => {
+  btn.addEventListener("click", () => setShareTab(btn.dataset.shareTab));
+});
 
-function openXyzModal(layer) {
-  const pkg = buildGeotrakPackage(layer);
-  document.getElementById("xyz-layer-id").value = layer.id;
-  document.getElementById("xyz-url").value = pkg.url;
-  document.getElementById("xyz-source-layer").value = pkg.sourceLayer;
-  document.getElementById("xyz-geometry").value = pkg.geometry;
-  document.getElementById("xyz-package").value = JSON.stringify(pkg, null, 2);
-  const status = document.getElementById("xyz-copy-status");
-  status.classList.add("hidden");
-  status.textContent = "";
-  openModal("xyz-modal");
-}
+async function copyShareValue(kind, button) {
+  const layer = CURRENT_SHARE_LAYER;
+  if (!layer) return;
 
-async function copyFieldValue(targetId) {
-  const el = document.getElementById(targetId);
-  const text = el.value;
+  const text =
+    kind === "source"
+      ? (layer.source_layer || document.getElementById("xyz-source-layer").dataset.copyText || "")
+      : (layer.xyz_url || document.getElementById("xyz-url").dataset.copyText || "");
+
   const status = document.getElementById("xyz-copy-status");
+  clearTimeout(SHARE_COPY_RESET);
+
   try {
     await navigator.clipboard.writeText(text);
-    status.textContent = "Copied to clipboard.";
-    status.classList.remove("hidden");
+    document.querySelectorAll(".xyz-copy-btn.is-copied").forEach((btn) => {
+      btn.classList.remove("is-copied");
+    });
+    button.classList.add("is-copied");
+    status.textContent = kind === "source" ? "Source layer copied." : "XYZ link copied.";
+    status.classList.add("is-visible");
+    SHARE_COPY_RESET = window.setTimeout(() => {
+      button.classList.remove("is-copied");
+      status.classList.remove("is-visible");
+    }, 1800);
   } catch {
-    el.focus();
-    el.select?.();
-    status.textContent = "Could not copy automatically — select the text and copy manually.";
-    status.classList.remove("hidden");
+    status.textContent = "Copy failed — select the text and copy manually.";
+    status.classList.add("is-visible");
   }
 }
 
-document.querySelectorAll("#xyz-modal [data-copy-target]").forEach((btn) => {
-  btn.addEventListener("click", () => copyFieldValue(btn.dataset.copyTarget));
-});
-
-document.getElementById("copy-xyz-all").addEventListener("click", () => {
-  copyFieldValue("xyz-package");
+document.querySelectorAll("#share-panel-xyz [data-copy-value]").forEach((btn) => {
+  btn.addEventListener("click", () => copyShareValue(btn.dataset.copyValue, btn));
 });
 
 document.addEventListener("DOMContentLoaded", () => {

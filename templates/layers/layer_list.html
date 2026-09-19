@@ -5,7 +5,7 @@
 <div class="toolbar">
   <div>
     <h1>Layers</h1>
-    <p class="lede">Upload shapefiles, style them, share with your team, or copy an XYZ tile link for external maps.</p>
+    <p class="lede">Upload shapefiles, style them, and share with your team.</p>
   </div>
   <button type="button" class="btn btn-primary" id="open-upload-modal">Upload shapefile</button>
 </div>
@@ -126,73 +126,85 @@
 </div>
 
 <div id="share-modal" class="modal-backdrop hidden">
-  <div class="modal" role="dialog" aria-labelledby="share-layer-title">
+  <div class="modal modal-share" role="dialog" aria-labelledby="share-layer-title">
     <h2 id="share-layer-title">Share layer</h2>
     <input type="hidden" id="share-layer-id">
-    <div class="form-group">
-      <label for="share-search">Find user (username or email)</label>
-      <input type="text" id="share-search">
-      <div id="share-results" class="share-results muted"></div>
+
+    <div class="share-tabs" role="tablist" aria-label="Share options">
+      <button type="button" class="share-tab is-active" role="tab" id="share-tab-people" aria-selected="true" aria-controls="share-panel-people" data-share-tab="people">
+        People
+      </button>
+      <button type="button" class="share-tab" role="tab" id="share-tab-xyz" aria-selected="false" aria-controls="share-panel-xyz" data-share-tab="xyz">
+        XYZ link
+      </button>
     </div>
-    <div class="form-group">
-      <label for="share-permission">Permission</label>
-      <select id="share-permission">
-        <option value="view">View only</option>
-        <option value="edit">Can edit style &amp; labels</option>
-      </select>
+
+    <div id="share-panel-people" class="share-panel is-active" role="tabpanel" aria-labelledby="share-tab-people">
+      <div id="share-people-owner">
+        <div class="form-group">
+          <label for="share-search">Find user (username or email)</label>
+          <input type="text" id="share-search">
+          <div id="share-results" class="share-results muted"></div>
+        </div>
+        <div class="form-group">
+          <label for="share-permission">Permission</label>
+          <select id="share-permission">
+            <option value="view">View only</option>
+            <option value="edit">Can edit style &amp; labels</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
+        <p class="share-heading">Currently shared with</p>
+        <ul id="share-list" class="share-list muted"></ul>
+      </div>
+      <div id="share-people-viewer" class="share-viewer-note hidden">
+        <p>Only the layer owner can share with other users.</p>
+      </div>
     </div>
-    <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
-    <p class="share-heading">Currently shared with</p>
-    <ul id="share-list" class="share-list muted"></ul>
+
+    <div id="share-panel-xyz" class="share-panel" role="tabpanel" aria-labelledby="share-tab-xyz" hidden>
+      <p class="share-xyz-lede">
+        Vector tile URL for any client that supports XYZ / MVT overlays.
+        Anyone with the link can request tiles.
+      </p>
+
+      <div class="xyz-card">
+        <div class="xyz-card-label">
+          <span>XYZ template</span>
+          <span class="xyz-live-dot" aria-hidden="true"></span>
+          <span class="xyz-live-label">Live</span>
+        </div>
+        <div class="xyz-url-row">
+          <code id="xyz-url" class="xyz-url"></code>
+          <button type="button" class="btn btn-primary xyz-copy-btn" id="copy-xyz-url" data-copy-value="url">
+            <span class="xyz-copy-label">Copy</span>
+            <span class="xyz-copy-done" aria-hidden="true">Copied</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="xyz-meta">
+        <div class="xyz-meta-item">
+          <span class="xyz-meta-label">Source layer</span>
+          <div class="xyz-chip-row">
+            <code id="xyz-source-layer" class="xyz-chip"></code>
+            <button type="button" class="btn btn-sm xyz-copy-btn" id="copy-xyz-source" data-copy-value="source">
+              <span class="xyz-copy-label">Copy</span>
+              <span class="xyz-copy-done" aria-hidden="true">Copied</span>
+            </button>
+          </div>
+        </div>
+        <div class="xyz-meta-item">
+          <span class="xyz-meta-label">Suggested style</span>
+          <code id="xyz-geometry" class="xyz-chip xyz-chip-muted"></code>
+        </div>
+      </div>
+
+      <p id="xyz-copy-status" class="xyz-toast" role="status" aria-live="polite"></p>
+    </div>
+
     <div class="modal-actions">
       <button type="button" class="btn" data-close-modal="share-modal">Close</button>
-    </div>
-  </div>
-</div>
-
-<div id="xyz-modal" class="modal-backdrop hidden">
-  <div class="modal modal-wide" role="dialog" aria-labelledby="xyz-modal-title">
-    <h2 id="xyz-modal-title">XYZ tile link</h2>
-    <p class="lede xyz-modal-lede">
-      Use this vector tile URL in GeoTrak Maps or any MapLibre / Mapbox client.
-      Anyone with the URL can request tiles from Martin.
-    </p>
-    <input type="hidden" id="xyz-layer-id">
-
-    <div class="form-group">
-      <label for="xyz-url">XYZ URL template</label>
-      <div class="copy-field">
-        <input type="text" id="xyz-url" readonly spellcheck="false">
-        <button type="button" class="btn btn-sm" id="copy-xyz-url" data-copy-target="xyz-url">Copy</button>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="xyz-source-layer">Source layer</label>
-      <div class="copy-field">
-        <input type="text" id="xyz-source-layer" readonly spellcheck="false">
-        <button type="button" class="btn btn-sm" id="copy-xyz-source" data-copy-target="xyz-source-layer">Copy</button>
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="xyz-geometry">Suggested geometry style</label>
-      <input type="text" id="xyz-geometry" readonly>
-    </div>
-
-    <div class="form-group">
-      <label for="xyz-package">GeoTrak import package</label>
-      <div class="copy-field copy-field-tall">
-        <textarea id="xyz-package" rows="6" readonly spellcheck="false"></textarea>
-        <button type="button" class="btn btn-sm" id="copy-xyz-package" data-copy-target="xyz-package">Copy</button>
-      </div>
-      <p class="field-hint">Paste this into GeoTrak → Tiles Configuration → Tile server URL to fill URL, source layer, and geometry in one step.</p>
-    </div>
-
-    <div id="xyz-copy-status" class="muted hidden" role="status"></div>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-primary" id="copy-xyz-all">Copy package</button>
-      <button type="button" class="btn" data-close-modal="xyz-modal">Close</button>
     </div>
   </div>
 </div>

@@ -5,7 +5,7 @@ from apps.accounts.serializers import UserSummarySerializer
 
 from .models import LayerInfo, LayerShare
 
-# Map PostGIS geometry types → GeoTrak / MapLibre style hints.
+# Map PostGIS geometry types → MapLibre / Mapbox style hints.
 _SUGGESTED_GEOMETRY = {
     LayerInfo.GeometryType.POINT: "circle",
     LayerInfo.GeometryType.MULTIPOINT: "circle",
@@ -58,7 +58,7 @@ class LayerInfoSerializer(serializers.ModelSerializer):
         return f"{settings.MARTIN_TILE_SERVER_URL.rstrip('/')}/{obj.table_name}"
 
     def get_xyz_url(self, obj):
-        """Shareable XYZ template for external map clients (e.g. GeoTrak)."""
+        """Shareable XYZ template for any external map / tile client."""
         return f"{self.get_tile_url(obj)}/{{z}}/{{x}}/{{y}}"
 
     def get_source_layer(self, obj):
