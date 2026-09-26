@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% load static %}
+{% block page_class %}full-bleed auth-page{% endblock %}
+{% block extra_head %}
+<link rel="preload" href="{% static 'video/animation-auth.mp4' %}" as="video" type="video/mp4">
+{% endblock %}
+{% block content %}
+<div class="auth-stage">
+  {% include "registration/include_auth_bg.html" %}
+  <div class="auth-stage-content">
+    <header class="auth-brand">
+      <p class="auth-brand-mark">GeoLayers</p>
+      <p class="auth-brand-tag">Shapefiles to shareable web maps</p>
+    </header>
+    <section class="auth-frame">
+      {% block auth_panel %}{% endblock %}
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{% static 'js/auth_bg.js' %}"></script>
+{% block auth_scripts %}{% endblock %}
+{% endblock %}

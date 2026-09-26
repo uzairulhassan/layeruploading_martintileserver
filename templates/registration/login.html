@@ -1,36 +1,28 @@
-{% extends "base.html" %}
+{% extends "registration/base_auth.html" %}
 {% load static %}
 {% block title %}Sign in · GeoLayers{% endblock %}
-{% block page_class %}full-bleed auth-page{% endblock %}
-{% block content %}
-<div class="auth-shell">
-  <aside class="auth-visual" aria-hidden="true">
-    <div class="auth-visual-inner">
-      <div class="brand-mark">GeoLayers</div>
-      <p>Upload shapefiles, style layers, and compose shareable web maps.</p>
-    </div>
-  </aside>
-  <div class="auth-panel">
-    <h1>Sign in</h1>
-    <p class="lede">Use your GeoLayers account to continue.</p>
-    <form id="login-form">
-      <div class="form-group">
-        <label for="username">Username or email</label>
-        <input type="text" id="username" name="username" required autofocus autocomplete="username">
-      </div>
-      <div class="form-group">
-        <label for="password">Password</label>
-        <input type="password" id="password" name="password" required autocomplete="current-password">
-      </div>
-      <div id="login-error" class="error-text hidden" role="alert"></div>
-      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
-    </form>
-    <p class="auth-footer">
-      No account yet? <a href="{% url 'core:signup' %}">Create one</a>
-    </p>
+{% block auth_panel %}
+<p class="auth-kicker">Welcome back</p>
+<h1>Sign in</h1>
+<p class="auth-lede">Continue with your username or email.</p>
+
+<form id="login-form" class="auth-form">
+  <div class="form-group">
+    <label for="username">Username or email</label>
+    <input type="text" id="username" name="username" required autofocus autocomplete="username" placeholder="you@example.com">
   </div>
-</div>
+  <div class="form-group">
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="Enter your password">
+  </div>
+  <div id="login-error" class="error-text hidden" role="alert"></div>
+  <button type="submit" class="btn btn-primary btn-block auth-submit">Sign in</button>
+</form>
+
+<p class="auth-footer">
+  No account yet? <a href="{% url 'core:signup' %}">Create one</a>
+</p>
 {% endblock %}
-{% block extra_scripts %}
+{% block auth_scripts %}
 <script src="{% static 'js/login.js' %}"></script>
 {% endblock %}

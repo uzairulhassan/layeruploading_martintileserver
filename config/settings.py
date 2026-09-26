@@ -100,6 +100,12 @@ STORAGES = {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
+# Never gzip already-compressed media — Range requests for <video> break intermittently.
+WHITENOISE_SKIP_COMPRESS_EXTENSIONS = (
+    "jpg", "jpeg", "png", "gif", "webp", "zip", "gz", "tgz", "bz2", "tbz",
+    "xz", "br", "swf", "flv", "woff", "woff2",
+    "mp4", "webm", "mp3", "ogg", "mov",
+)
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"

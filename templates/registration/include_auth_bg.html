@@ -1,0 +1,16 @@
+{% load static %}
+<div class="auth-stage-bg" aria-hidden="true">
+  <video
+    id="auth-bg-video"
+    class="auth-stage-video"
+    muted
+    loop
+    playsinline
+    webkit-playsinline
+    preload="auto"
+    disablepictureinpicture
+    disableremoteplayback
+    src="{% static 'video/animation-auth.mp4' %}"
+  ></video>
+  <div class="auth-stage-scrim"></div>
+</div>
