@@ -10,40 +10,90 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import Role, User
 from .permissions import CanManageRoles
 from .serializers import (
+    OnetimeRegisterSerializer,
     RegisterSerializer,
     RoleSerializer,
     TokenObtainPairWithUserSerializer,
+    UsernameAvailabilitySerializer,
     UserSerializer,
     UserSummarySerializer,
 )
 
 
-class RegisterView(generics.CreateAPIView):
-    """Public sign-up endpoint. New users start with no roles assigned."""
+def _issue_tokens_and_session(request, user):
+    """Establish a Django session and return a JWT pair + user payload."""
+    refresh = RefreshToken.for_user(user)
+    django_login(request, user)
+    return {
+        "access": str(refresh.access_token),
+        "refresh": str(refresh),
+        "user": UserSerializer(user).data,
+    }
+
+
+class BaseRegisterView(generics.CreateAPIView):
+    """Shared create flow: validate → save → issue session + JWT."""
 
     queryset = User.objects.all()
-    serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(_issue_tokens_and_session(request, user), status=status.HTTP_201_CREATED)
+
+
+class RegisterView(BaseRegisterView):
+    """Public sign-up. New users are assigned the ``User`` role and signed in."""
+
+    serializer_class = RegisterSerializer
+
+
+class OnetimeRegisterView(BaseRegisterView):
+    """One-shot bootstrap registration for the first Admin account."""
+
+    serializer_class = OnetimeRegisterSerializer
+
+    def create(self, request, *args, **kwargs):
+        if User.objects.exists():
+            return Response(
+                {"detail": "Initial setup is already complete."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().create(request, *args, **kwargs)
+
+
+class UsernameAvailabilityView(APIView):
+    """Live username availability check for the sign-up / onetime forms."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        serializer = UsernameAvailabilitySerializer(data=request.query_params)
+        if not serializer.is_valid():
+            return Response(
+                {"available": False, "errors": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        username = serializer.validated_data["username"]
+        available = not User.objects.filter(username__iexact=username).exists()
+        return Response({"username": username, "available": available})
 
 
 class LoginView(TokenObtainPairView):
     """Issues a JWT access/refresh pair AND establishes a Django session.
 
-    The session lets server-rendered template pages (dashboard, map builder)
-    know the user is signed in, while the JWT pair is used by the frontend
-    JS for calls against the DRF API (with silent refresh on expiry).
+    Accepts username or email in the ``username`` field.
     """
 
     serializer_class = TokenObtainPairWithUserSerializer
 
     def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        if response.status_code == 200:
-            username = request.data.get("username")
-            user = User.objects.filter(username=username).first()
-            if user is not None:
-                django_login(request, user)
-        return response
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        django_login(request, serializer.user)
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
 class LogoutView(APIView):

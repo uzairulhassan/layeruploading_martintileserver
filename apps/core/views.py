@@ -3,6 +3,8 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect
 from django.views.generic import TemplateView, View
 
+from apps.accounts.models import User
+
 
 class LoginPageView(TemplateView):
     template_name = "registration/login.html"
@@ -10,6 +12,31 @@ class LoginPageView(TemplateView):
     def get(self, request, *args, **kwargs):
         if request.user.is_authenticated:
             return redirect("core:dashboard")
+        return super().get(request, *args, **kwargs)
+
+
+class SignupPageView(TemplateView):
+    template_name = "registration/signup.html"
+
+    def get(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect("core:dashboard")
+        return super().get(request, *args, **kwargs)
+
+
+class OnetimePageView(TemplateView):
+    """Bootstrap page for registering the first Admin account.
+
+    Once any user exists, the URL is closed and visitors are sent to login.
+    """
+
+    template_name = "registration/onetime.html"
+
+    def get(self, request, *args, **kwargs):
+        if request.user.is_authenticated:
+            return redirect("core:dashboard")
+        if User.objects.exists():
+            return redirect("core:login")
         return super().get(request, *args, **kwargs)
 
 

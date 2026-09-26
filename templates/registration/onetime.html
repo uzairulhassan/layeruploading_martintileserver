@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Initial setup · GeoLayers{% endblock %}
+{% block page_class %}full-bleed auth-page{% endblock %}
+{% block content %}
+<div class="auth-shell">
+  <aside class="auth-visual" aria-hidden="true">
+    <div class="auth-visual-inner">
+      <div class="brand-mark">GeoLayers</div>
+      <p>Upload shapefiles, style layers, and compose shareable web maps.</p>
+    </div>
+  </aside>
+  <div class="auth-panel">
+    <h1>Initial setup</h1>
+    <p class="lede">Create the first Admin account for this GeoLayers instance.</p>
+    <form
+      id="register-form"
+      data-endpoint="/api/auth/onetime/"
+      data-fail-message="Setup failed."
+      novalidate
+    >
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autofocus autocomplete="username" maxlength="150">
+        <div id="username-status" class="field-hint" aria-live="polite"></div>
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required autocomplete="new-password" minlength="8">
+      </div>
+      <div class="form-group">
+        <label for="password_confirm">Confirm password</label>
+        <input type="password" id="password_confirm" name="password_confirm" required autocomplete="new-password" minlength="8">
+      </div>
+      <div id="register-error" class="error-text hidden" role="alert"></div>
+      <button type="submit" id="register-submit" class="btn btn-primary btn-block">Create Admin</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{% static 'js/register_form.js' %}"></script>
+{% endblock %}

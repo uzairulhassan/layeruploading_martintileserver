@@ -3,7 +3,16 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from django.urls import path, include
 
-from .views import LoginView, LogoutView, MeView, RegisterView, RoleViewSet, UserViewSet
+from .views import (
+    LoginView,
+    LogoutView,
+    MeView,
+    OnetimeRegisterView,
+    RegisterView,
+    RoleViewSet,
+    UsernameAvailabilityView,
+    UserViewSet,
+)
 
 router = DefaultRouter()
 router.register("roles", RoleViewSet, basename="role")
@@ -13,6 +22,8 @@ app_name = "accounts_api"
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
+    path("onetime/", OnetimeRegisterView.as_view(), name="onetime"),
+    path("username-available/", UsernameAvailabilityView.as_view(), name="username_available"),
     path("login/", LoginView.as_view(), name="login"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("logout/", LogoutView.as_view(), name="logout"),

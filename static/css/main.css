@@ -652,6 +652,44 @@ tbody tr:hover {
 
 .auth-panel .lede {
   margin: 0 0 1.75rem;
+  color: var(--navy-muted);
+}
+
+.auth-footer {
+  margin: 1.35rem 0 0;
+  font-size: 0.9rem;
+  color: var(--navy-muted);
+  text-align: center;
+}
+
+.auth-footer a {
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.field-hint {
+  min-height: 1.15rem;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--navy-muted);
+}
+
+.field-hint.is-pending {
+  color: var(--navy-muted);
+}
+
+.field-hint.is-ok {
+  color: #1b6b3a;
+}
+
+.field-hint.is-error {
+  color: var(--danger);
+}
+
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* —— Modals —— */

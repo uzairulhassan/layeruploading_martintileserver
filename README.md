@@ -51,12 +51,14 @@ martin/      Entrypoint that generates Martin's runtime config for Compose
 
 ### Auth model
 
-Login (`POST /api/auth/login/`) both establishes a Django session (so
-server-rendered pages know who's signed in) **and** returns a JWT
-access/refresh pair, which the frontend (`static/js/auth.js`) stores and
-attaches to every API call. On a `401` it silently calls
-`/api/auth/token/refresh/` once and retries. Refresh tokens rotate and old
-ones are blacklisted (`rest_framework_simplejwt.token_blacklist`).
+Bootstrap the first account at `/onetime/` (assigned the **Admin** role,
+plus staff/superuser). Later accounts register at `/signup/` (assigned the
+**User** role). Login (`POST /api/auth/login/`) accepts **username or email**,
+establishes a Django session (so server-rendered pages know who's signed in)
+**and** returns a JWT access/refresh pair, which the frontend
+(`static/js/auth.js`) stores and attaches to every API call. On a `401` it
+silently calls `/api/auth/token/refresh/` once and retries. Refresh tokens
+rotate and old ones are blacklisted (`rest_framework_simplejwt.token_blacklist`).
 
 ### Roles & permissions
 
@@ -173,7 +175,8 @@ martin --config martin/config.example.yaml
 
 | Endpoint | Notes |
 | --- | --- |
-| `POST /api/auth/register/`, `/login/`, `/token/refresh/`, `/logout/` | JWT auth |
+| `POST /api/auth/onetime/`, `/register/`, `/login/`, `/token/refresh/`, `/logout/` | Bootstrap Admin, sign-up, JWT auth (login accepts username or email) |
+| `GET /api/auth/username-available/?username=` | Live username availability check |
 | `GET/PATCH /api/auth/me/` | Current user profile |
 | `GET /api/auth/users/?search=` | User directory for share pickers |
 | `CRUD /api/auth/roles/` | Role & permission management |
