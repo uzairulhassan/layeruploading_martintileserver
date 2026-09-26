@@ -1,6 +1,7 @@
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
 from rest_framework import generics, permissions, status, viewsets
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
@@ -10,7 +11,10 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import Role, User
 from .permissions import CanManageRoles
 from .serializers import (
+    AvatarUploadSerializer,
+    ChangePasswordSerializer,
     OnetimeRegisterSerializer,
+    ProfileUpdateSerializer,
     RegisterSerializer,
     RoleSerializer,
     TokenObtainPairWithUserSerializer,
@@ -20,19 +24,8 @@ from .serializers import (
 )
 
 
-def _issue_tokens_and_session(request, user):
-    """Establish a Django session and return a JWT pair + user payload."""
-    refresh = RefreshToken.for_user(user)
-    django_login(request, user)
-    return {
-        "access": str(refresh.access_token),
-        "refresh": str(refresh),
-        "user": UserSerializer(user).data,
-    }
-
-
 class BaseRegisterView(generics.CreateAPIView):
-    """Shared create flow: validate → save → issue session + JWT."""
+    """Shared create flow: validate → save. User must sign in afterwards."""
 
     queryset = User.objects.all()
     permission_classes = [permissions.AllowAny]
@@ -41,11 +34,17 @@ class BaseRegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        return Response(_issue_tokens_and_session(request, user), status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "detail": "Account created successfully. Please sign in.",
+                "user": UserSerializer(user).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class RegisterView(BaseRegisterView):
-    """Public sign-up. New users are assigned the ``User`` role and signed in."""
+    """Public sign-up. New users are assigned the ``User`` role."""
 
     serializer_class = RegisterSerializer
 
@@ -65,7 +64,7 @@ class OnetimeRegisterView(BaseRegisterView):
 
 
 class UsernameAvailabilityView(APIView):
-    """Live username availability check for the sign-up / onetime forms."""
+    """Live username availability check for the sign-up / onetime / account forms."""
 
     permission_classes = [permissions.AllowAny]
 
@@ -77,7 +76,10 @@ class UsernameAvailabilityView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         username = serializer.validated_data["username"]
-        available = not User.objects.filter(username__iexact=username).exists()
+        qs = User.objects.filter(username__iexact=username)
+        if request.user.is_authenticated:
+            qs = qs.exclude(pk=request.user.pk)
+        available = not qs.exists()
         return Response({"username": username, "available": available})
 
 
@@ -111,11 +113,57 @@ class LogoutView(APIView):
 
 
 class MeView(generics.RetrieveUpdateAPIView):
-    serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_object(self):
         return self.request.user
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return ProfileUpdateSerializer
+        return UserSerializer
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(UserSerializer(instance).data)
+
+
+class AvatarView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        serializer = AvatarUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        if user.avatar:
+            user.avatar.delete(save=False)
+        user.avatar = serializer.validated_data["avatar"]
+        user.save(update_fields=["avatar"])
+        return Response(UserSerializer(user).data)
+
+    def delete(self, request):
+        user = request.user
+        if user.avatar:
+            user.avatar.delete(save=False)
+            user.avatar = None
+            user.save(update_fields=["avatar"])
+        return Response(UserSerializer(user).data)
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        django_login(request, request.user)
+        return Response({"detail": "Password updated successfully."})
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):

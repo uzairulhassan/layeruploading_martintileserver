@@ -72,8 +72,7 @@ const Auth = (() => {
     if (!response.ok) {
       throw new Error(formatApiErrors(body));
     }
-    setTokens({ access: body.access, refresh: body.refresh });
-    return body.user;
+    return body;
   }
 
   function evaluatePassword(password) {
@@ -111,10 +110,14 @@ const Auth = (() => {
     };
   }
 
-  function bindUsernameCheck(inputEl, statusEl, onChange) {
+  function bindUsernameCheck(inputEl, statusEl, onChange, options = {}) {
     let timer = null;
     let latestRequest = 0;
     let available = false;
+    let currentUsername = String(options.currentUsername || "").trim().toLowerCase();
+    const availableMessage = options.availableMessage || "Username is available.";
+    const takenMessage = options.takenMessage || "Username is already taken.";
+    const currentMessage = options.currentMessage || availableMessage;
 
     function setStatus(text, state) {
       statusEl.textContent = text;
@@ -130,6 +133,12 @@ const Auth = (() => {
       if (!username) {
         available = false;
         setStatus("", "");
+        notify();
+        return;
+      }
+      if (currentUsername && username.toLowerCase() === currentUsername) {
+        available = true;
+        setStatus(currentMessage, "ok");
         notify();
         return;
       }
@@ -153,7 +162,7 @@ const Auth = (() => {
 
         available = Boolean(body.available);
         setStatus(
-          available ? "Username is available." : "Username is already taken.",
+          available ? availableMessage : takenMessage,
           available ? "ok" : "error",
         );
         notify();
@@ -166,6 +175,7 @@ const Auth = (() => {
     }
 
     inputEl.addEventListener("input", () => {
+      if (inputEl.readOnly || inputEl.disabled) return;
       available = false;
       notify();
       clearTimeout(timer);
@@ -177,12 +187,18 @@ const Auth = (() => {
     });
 
     inputEl.addEventListener("blur", () => {
+      if (inputEl.readOnly || inputEl.disabled) return;
       clearTimeout(timer);
       check(inputEl.value.trim());
     });
 
     notify();
-    return { isAvailable: () => available };
+    return {
+      isAvailable: () => available,
+      setCurrentUsername(value) {
+        currentUsername = String(value || "").trim().toLowerCase();
+      },
+    };
   }
 
   function bindPasswordCheck(passwordEl, confirmEl, onChange) {
@@ -348,6 +364,26 @@ const Auth = (() => {
     return source.slice(0, 2).toUpperCase();
   }
 
+  function avatarMarkup(user, className = "person-avatar") {
+    const url = user?.avatar_url;
+    if (url) {
+      return `<span class="${className} has-image" aria-hidden="true"><img src="${escapeHtml(url)}" alt=""></span>`;
+    }
+    return `<span class="${className}" aria-hidden="true">${escapeHtml(userInitials(user))}</span>`;
+  }
+
+  function syncHeaderAvatar(user) {
+    const el = document.getElementById("header-avatar");
+    if (!el || !user) return;
+    if (user.avatar_url) {
+      el.classList.add("has-image");
+      el.innerHTML = `<img src="${escapeHtml(user.avatar_url)}" alt="">`;
+    } else {
+      el.classList.remove("has-image");
+      el.textContent = userInitials(user);
+    }
+  }
+
   function personMeta(user) {
     const email = user?.email ? escapeHtml(user.email) : "";
     if (email) return `<span class="person-email">${email}</span>`;
@@ -358,7 +394,7 @@ const Auth = (() => {
     const meta = personMeta(user);
     return `
       <button type="button" class="person-row share-hit" data-user-id="${escapeHtml(user.id)}">
-        <span class="person-avatar" aria-hidden="true">${escapeHtml(userInitials(user))}</span>
+        ${avatarMarkup(user)}
         <span class="person-copy">
           <span class="person-name">${escapeHtml(user.display_name || user.username)}</span>
           ${meta ? `<span class="person-meta">${meta}</span>` : ""}
@@ -374,7 +410,7 @@ const Auth = (() => {
     const meta = personMeta(user);
     return `
       <li class="person-row">
-        <span class="person-avatar" aria-hidden="true">${escapeHtml(userInitials(user))}</span>
+        ${avatarMarkup(user)}
         <span class="person-copy">
           <span class="person-name">${escapeHtml(user.display_name || user.username)}${perm}</span>
           ${meta ? `<span class="person-meta">${meta}</span>` : ""}
@@ -406,13 +442,14 @@ const Auth = (() => {
     register,
     bindUsernameCheck,
     bindPasswordCheck,
-    evaluatePassword,
     apiFetch,
+    escapeHtml,
     openModal,
     closeModal,
     bindModalClosers,
     renderShareHit,
     renderSharePerson,
+    syncHeaderAvatar,
   };
 })();
 

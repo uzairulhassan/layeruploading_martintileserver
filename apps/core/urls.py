@@ -14,4 +14,6 @@ urlpatterns = [
     path("maps/", views.MapListPageView.as_view(), name="map_list"),
     path("maps/new/", views.MapNewRedirectView.as_view(), name="map_new"),
     path("maps/<uuid:map_id>/", views.MapBuilderPageView.as_view(), name="map_builder"),
+    path("account/", views.AccountPageView.as_view(), name="account"),
+    path("security/", views.SecurityPageView.as_view(), name="security"),
 ]

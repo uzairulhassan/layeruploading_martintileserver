@@ -16,6 +16,9 @@
       <a href="{% url 'core:dashboard' %}" {% if request.resolver_match.url_name == 'dashboard' %}class="is-active"{% endif %}>Dashboard</a>
       <a href="{% url 'core:layer_list' %}" {% if request.resolver_match.url_name == 'layer_list' %}class="is-active"{% endif %}>Layers</a>
       <a href="{% url 'core:map_list' %}" {% if request.resolver_match.url_name == 'map_list' or request.resolver_match.url_name == 'map_builder' %}class="is-active"{% endif %}>Maps</a>
+      {% if user.is_staff %}
+      <a href="{% url 'admin:index' %}">Admin</a>
+      {% endif %}
     </nav>
 
     <div class="user-menu">
@@ -29,7 +32,13 @@
         aria-label="Account menu"
         title="Account"
       >
-        <span class="profile-avatar" aria-hidden="true">{{ user.username|slice:":2"|upper }}</span>
+        <span class="profile-avatar{% if user.avatar %} has-image{% endif %}" id="header-avatar" aria-hidden="true">
+          {% if user.avatar %}
+          <img src="{{ user.avatar.url }}" alt="">
+          {% else %}
+          {{ user.username|slice:":2"|upper }}
+          {% endif %}
+        </span>
         <span class="profile-meta">
           <span class="profile-meta-name">{{ user.username }}</span>
           {% if user.email %}<span class="profile-meta-email">{{ user.email }}</span>{% endif %}
@@ -37,7 +46,8 @@
       </button>
 
       <div id="profile-menu" class="profile-dropdown hidden" role="menu">
-        <span class="profile-menu-item is-static" role="none">My Account</span>
+        <a href="{% url 'core:account' %}" class="profile-menu-item" role="menuitem">My Account</a>
+        <a href="{% url 'core:security' %}" class="profile-menu-item" role="menuitem">Security</a>
         <button type="button" id="logout-btn" class="profile-menu-item is-danger" role="menuitem">Sign out</button>
       </div>
     </div>

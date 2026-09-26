@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}My Account · GeoLayers{% endblock %}
+{% block content %}
+<div class="settings-page">
+  <header class="settings-header">
+    <div>
+      <p class="page-kicker">Account</p>
+      <h1>My Account</h1>
+      <p class="lede">Manage your profile photo and identity details.</p>
+    </div>
+  </header>
+
+  <div class="settings-layout">
+    <section class="settings-card" aria-labelledby="avatar-heading">
+      <div class="settings-card-head">
+        <h2 id="avatar-heading">Profile photo</h2>
+        <p class="settings-card-lede">Shown in the header and when sharing layers or maps.</p>
+      </div>
+
+      <div class="avatar-panel">
+        <div id="account-avatar" class="avatar-preview" aria-hidden="true">
+          {% if user.avatar %}
+          <img src="{{ user.avatar.url }}" alt="">
+          {% else %}
+          <span class="avatar-initials">{{ user.username|slice:":2"|upper }}</span>
+          {% endif %}
+        </div>
+        <div class="avatar-actions">
+          <label class="btn btn-primary avatar-upload-btn">
+            Upload photo
+            <input type="file" id="avatar-input" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
+          </label>
+          <button type="button" id="avatar-remove-btn" class="btn{% if not user.avatar %} hidden{% endif %}">Remove</button>
+          <p class="avatar-hint muted">JPG or PNG · max 2 MB</p>
+          <p id="avatar-status" class="field-hint" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-card" aria-labelledby="identity-heading">
+      <div class="settings-card-head">
+        <h2 id="identity-heading">Identity</h2>
+        <p class="settings-card-lede">Username and email can each be changed once every 30 days.</p>
+      </div>
+
+      <form id="account-form" class="settings-form" novalidate>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="account-username">Username</label>
+            <button type="button" id="edit-username-btn" class="btn-link">Edit</button>
+            <button type="button" id="cancel-username-btn" class="btn-link hidden">Cancel</button>
+          </div>
+          <input
+            type="text"
+            id="account-username"
+            name="username"
+            value="{{ user.username }}"
+            autocomplete="username"
+            maxlength="150"
+            required
+            readonly
+          >
+          <div id="account-username-status" class="field-hint" aria-live="polite"></div>
+          <p id="username-cooldown" class="field-hint is-pending" hidden></p>
+        </div>
+
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="account-email">Email</label>
+            <button type="button" id="edit-email-btn" class="btn-link">Edit</button>
+            <button type="button" id="cancel-email-btn" class="btn-link hidden">Cancel</button>
+          </div>
+          <input
+            type="email"
+            id="account-email"
+            name="email"
+            value="{{ user.email }}"
+            autocomplete="email"
+            required
+            readonly
+          >
+          <div id="account-email-status" class="field-hint" aria-live="polite"></div>
+          <p id="email-cooldown" class="field-hint is-pending" hidden></p>
+        </div>
+
+        <div class="settings-form-footer">
+          <p id="account-form-status" class="field-hint" role="status" aria-live="polite"></p>
+          <button type="submit" id="account-save-btn" class="btn btn-primary" disabled>Save changes</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="settings-card" aria-labelledby="meta-heading">
+      <div class="settings-card-head">
+        <h2 id="meta-heading">Account details</h2>
+        <p class="settings-card-lede">Read-only information about your account.</p>
+      </div>
+
+      <dl class="meta-grid">
+        <div class="meta-item">
+          <dt>Account type</dt>
+          <dd>
+            <span id="account-type-badge" class="account-badge {% if user.is_staff or user.is_superuser %}is-admin{% else %}is-user{% endif %}">
+              {% if user.is_staff or user.is_superuser %}Admin{% else %}User{% endif %}
+            </span>
+          </dd>
+        </div>
+        <div class="meta-item">
+          <dt>Member since</dt>
+          <dd id="account-created">{{ user.date_joined|date:"F j, Y" }}</dd>
+        </div>
+      </dl>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{% static 'js/account.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Security · GeoLayers{% endblock %}
+{% block content %}
+<div class="settings-page">
+  <header class="settings-header">
+    <div>
+      <p class="page-kicker">Account</p>
+      <h1>Security</h1>
+      <p class="lede">Protect your account with a strong password and review sessions.</p>
+    </div>
+  </header>
+
+  <div class="settings-layout settings-layout--narrow">
+    <section class="settings-card" aria-labelledby="password-heading">
+      <div class="settings-card-head">
+        <h2 id="password-heading">Change password</h2>
+        <p class="settings-card-lede">Use a unique password you do not reuse on other sites.</p>
+      </div>
+
+      <form id="password-form" class="settings-form" novalidate>
+        <div class="form-group">
+          <label for="current_password">Current password</label>
+          <input
+            type="password"
+            id="current_password"
+            name="current_password"
+            autocomplete="current-password"
+            required
+            placeholder="Enter your current password"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="new_password">New password</label>
+          <input
+            type="password"
+            id="new_password"
+            name="new_password"
+            autocomplete="new-password"
+            required
+            minlength="8"
+            placeholder="Create a strong password"
+            aria-describedby="password-strength password-rules"
+          >
+          <div id="password-strength" class="password-strength" hidden>
+            <div class="password-strength-track" aria-hidden="true">
+              <span class="password-strength-bar"></span>
+            </div>
+            <p class="password-strength-label"></p>
+          </div>
+          <ul id="password-rules" class="password-rules" aria-live="polite">
+            <li data-rule="length">At least 8 characters</li>
+            <li data-rule="letter">At least 1 letter</li>
+            <li data-rule="digit">At least 1 number</li>
+            <li data-rule="special">At least 1 special character (@, $, !, #…)</li>
+          </ul>
+        </div>
+
+        <div class="form-group">
+          <label for="new_password_confirm">Confirm new password</label>
+          <input
+            type="password"
+            id="new_password_confirm"
+            name="new_password_confirm"
+            autocomplete="new-password"
+            required
+            minlength="8"
+            placeholder="Repeat new password"
+          >
+          <div id="password-match" class="field-hint" aria-live="polite"></div>
+        </div>
+
+        <div class="settings-form-footer">
+          <p id="password-form-status" class="field-hint" role="status" aria-live="polite"></p>
+          <button type="submit" id="password-save-btn" class="btn btn-primary" disabled>Update password</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="settings-card" aria-labelledby="sessions-heading">
+      <div class="settings-card-head settings-card-head--row">
+        <div>
+          <h2 id="sessions-heading">Sessions</h2>
+          <p class="settings-card-lede">See where you’re signed in and revoke active sessions.</p>
+        </div>
+        <span class="coming-soon-tag">Coming soon</span>
+      </div>
+
+      <div class="sessions-placeholder" aria-disabled="true">
+        <div class="sessions-placeholder-icon" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="4" width="18" height="14" rx="1.5" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M8 20h8M12 18v2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="sessions-placeholder-title">Session management</p>
+        <p class="sessions-placeholder-copy muted">
+          Device list, last active times, and sign-out from other sessions will land here soon.
+        </p>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block extra_scripts %}
+<script src="{% static 'js/security.js' %}"></script>
+{% endblock %}

@@ -88,3 +88,13 @@ class MapBuilderPageView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["map_id"] = self.kwargs["map_id"]
         return context
+
+
+class AccountPageView(LoginRequiredMixin, TemplateView):
+    template_name = "accounts/account.html"
+    login_url = "core:login"
+
+
+class SecurityPageView(LoginRequiredMixin, TemplateView):
+    template_name = "accounts/security.html"
+    login_url = "core:login"

@@ -67,7 +67,7 @@
         password,
         password_confirm: passwordConfirm,
       });
-      window.location.href = "/";
+      window.location.href = "/login/";
     } catch (err) {
       errorBox.textContent = err.message || failMessage;
       errorBox.classList.remove("hidden");

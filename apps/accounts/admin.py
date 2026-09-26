@@ -8,7 +8,9 @@ from .models import Role, User
 class UserAdmin(BaseUserAdmin):
     fieldsets = BaseUserAdmin.fieldsets + (
         ("Roles & Organization", {"fields": ("roles", "organization")}),
+        ("Profile", {"fields": ("avatar", "username_changed_at", "email_changed_at")}),
     )
+    readonly_fields = ("username_changed_at", "email_changed_at")
     filter_horizontal = BaseUserAdmin.filter_horizontal + ("roles",)
     list_display = ("username", "email", "first_name", "last_name", "is_staff")
 
