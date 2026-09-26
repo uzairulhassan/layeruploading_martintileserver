@@ -353,12 +353,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.addEventListener("click", (event) => {
     if (
-      !profileMenu.classList.contains("hidden")
-      && !profileMenu.contains(event.target)
-      && !profileBtn.contains(event.target)
+      profileMenu.classList.contains("hidden")
+      || profileMenu.contains(event.target)
+      || profileBtn.contains(event.target)
     ) {
-      setMenuOpen(false);
+      return;
     }
+    setMenuOpen(false);
   });
 
   document.addEventListener("keydown", (event) => {
