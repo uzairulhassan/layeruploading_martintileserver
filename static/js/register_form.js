@@ -12,7 +12,27 @@
   const submitBtn = document.getElementById("register-submit");
   const usernameInput = document.getElementById("username");
   const statusEl = document.getElementById("username-status");
-  const usernameCheck = Auth.bindUsernameCheck(usernameInput, statusEl, submitBtn);
+  const passwordInput = document.getElementById("password");
+  const confirmInput = document.getElementById("password_confirm");
+
+  let usernameCheck = null;
+  let passwordCheck = null;
+
+  function refreshSubmit() {
+    if (!usernameCheck || !passwordCheck) {
+      submitBtn.disabled = true;
+      return;
+    }
+    const ready =
+      usernameCheck.isAvailable()
+      && passwordCheck.isValid()
+      && passwordCheck.matchesConfirm();
+    submitBtn.disabled = !ready;
+  }
+
+  usernameCheck = Auth.bindUsernameCheck(usernameInput, statusEl, refreshSubmit);
+  passwordCheck = Auth.bindPasswordCheck(passwordInput, confirmInput, refreshSubmit);
+  refreshSubmit();
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -20,15 +40,20 @@
 
     const username = usernameInput.value.trim();
     const email = document.getElementById("email").value.trim();
-    const password = document.getElementById("password").value;
-    const passwordConfirm = document.getElementById("password_confirm").value;
+    const password = passwordInput.value;
+    const passwordConfirm = confirmInput.value;
 
     if (!usernameCheck.isAvailable()) {
       errorBox.textContent = "Please choose an available username.";
       errorBox.classList.remove("hidden");
       return;
     }
-    if (password !== passwordConfirm) {
+    if (!passwordCheck.isValid()) {
+      errorBox.textContent = "Password does not meet the requirements.";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+    if (!passwordCheck.matchesConfirm()) {
       errorBox.textContent = "Passwords do not match.";
       errorBox.classList.remove("hidden");
       return;
@@ -46,7 +71,7 @@
     } catch (err) {
       errorBox.textContent = err.message || failMessage;
       errorBox.classList.remove("hidden");
-      submitBtn.disabled = !usernameCheck.isAvailable();
+      refreshSubmit();
     }
   });
 })();

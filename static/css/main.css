@@ -792,6 +792,107 @@ tbody tr:hover {
   color: var(--danger);
 }
 
+.password-strength {
+  margin-top: 0.55rem;
+}
+
+.password-strength-track {
+  height: 4px;
+  background: rgba(15, 45, 83, 0.1);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.password-strength-bar {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: rgba(15, 45, 83, 0.35);
+  transition: width 0.2s ease, background-color 0.2s ease;
+}
+
+.password-strength[data-level="weak"] .password-strength-bar {
+  background: #b42318;
+}
+
+.password-strength[data-level="fair"] .password-strength-bar {
+  background: #b54708;
+}
+
+.password-strength[data-level="good"] .password-strength-bar {
+  background: #1b6b3a;
+}
+
+.password-strength[data-level="strong"] .password-strength-bar {
+  background: #0f2d53;
+}
+
+.password-strength-label {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(15, 45, 83, 0.55);
+}
+
+.password-strength[data-level="weak"] .password-strength-label {
+  color: #b42318;
+}
+
+.password-strength[data-level="fair"] .password-strength-label {
+  color: #b54708;
+}
+
+.password-strength[data-level="good"] .password-strength-label,
+.password-strength[data-level="strong"] .password-strength-label {
+  color: #1b6b3a;
+}
+
+.password-strength[data-level="strong"] .password-strength-label {
+  color: var(--navy);
+}
+
+.password-rules {
+  list-style: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.28rem;
+}
+
+.password-rules li {
+  position: relative;
+  padding-left: 1.05rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: rgba(15, 45, 83, 0.45);
+}
+
+.password-rules li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  border: 1px solid rgba(15, 45, 83, 0.28);
+  border-radius: 1px;
+  background: transparent;
+}
+
+.password-rules li.is-met {
+  color: #1b6b3a;
+}
+
+.password-rules li.is-met::before {
+  border-color: #1b6b3a;
+  background: #1b6b3a;
+}
+
+.password-rules li.is-unmet {
+  color: rgba(15, 45, 83, 0.55);
+}
+
 @keyframes auth-rise {
   from {
     opacity: 0;

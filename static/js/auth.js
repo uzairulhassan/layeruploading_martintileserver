@@ -76,7 +76,42 @@ const Auth = (() => {
     return body.user;
   }
 
-  function bindUsernameCheck(inputEl, statusEl, submitBtn) {
+  function evaluatePassword(password) {
+    const rules = {
+      length: password.length >= 8,
+      letter: /[A-Za-z]/.test(password),
+      digit: /\d/.test(password),
+      special: /[^A-Za-z0-9]/.test(password),
+    };
+    const score = Object.values(rules).filter(Boolean).length;
+    let label = "";
+    let level = "";
+    if (!password) {
+      label = "";
+      level = "";
+    } else if (score <= 1) {
+      label = "Weak";
+      level = "weak";
+    } else if (score === 2) {
+      label = "Fair";
+      level = "fair";
+    } else if (score === 3) {
+      label = "Good";
+      level = "good";
+    } else {
+      label = "Strong";
+      level = "strong";
+    }
+    return {
+      rules,
+      score,
+      label,
+      level,
+      valid: score === 4,
+    };
+  }
+
+  function bindUsernameCheck(inputEl, statusEl, onChange) {
     let timer = null;
     let latestRequest = 0;
     let available = false;
@@ -86,8 +121,8 @@ const Auth = (() => {
       statusEl.className = "field-hint" + (state ? ` is-${state}` : "");
     }
 
-    function updateSubmit() {
-      if (submitBtn) submitBtn.disabled = !available;
+    function notify() {
+      if (typeof onChange === "function") onChange();
     }
 
     async function check(username) {
@@ -95,7 +130,7 @@ const Auth = (() => {
       if (!username) {
         available = false;
         setStatus("", "");
-        updateSubmit();
+        notify();
         return;
       }
       setStatus("Checking availability…", "pending");
@@ -112,7 +147,7 @@ const Auth = (() => {
             ? (Array.isArray(body.errors.username) ? body.errors.username[0] : body.errors.username)
             : "Invalid username.";
           setStatus(err, "error");
-          updateSubmit();
+          notify();
           return;
         }
 
@@ -121,18 +156,18 @@ const Auth = (() => {
           available ? "Username is available." : "Username is already taken.",
           available ? "ok" : "error",
         );
-        updateSubmit();
+        notify();
       } catch (err) {
         if (requestId !== latestRequest) return;
         available = false;
         setStatus("Could not check username.", "error");
-        updateSubmit();
+        notify();
       }
     }
 
     inputEl.addEventListener("input", () => {
       available = false;
-      updateSubmit();
+      notify();
       clearTimeout(timer);
       if (!inputEl.value.trim()) {
         setStatus("", "");
@@ -146,8 +181,81 @@ const Auth = (() => {
       check(inputEl.value.trim());
     });
 
-    updateSubmit();
+    notify();
     return { isAvailable: () => available };
+  }
+
+  function bindPasswordCheck(passwordEl, confirmEl, onChange) {
+    const strengthEl = document.getElementById("password-strength");
+    const strengthBar = strengthEl ? strengthEl.querySelector(".password-strength-bar") : null;
+    const strengthLabel = strengthEl ? strengthEl.querySelector(".password-strength-label") : null;
+    const rulesEl = document.getElementById("password-rules");
+    const matchEl = document.getElementById("password-match");
+    let valid = false;
+    let matches = false;
+
+    function notify() {
+      if (typeof onChange === "function") onChange();
+    }
+
+    function render() {
+      const password = passwordEl.value;
+      const confirm = confirmEl.value;
+      const result = evaluatePassword(password);
+      valid = result.valid;
+      matches = Boolean(password) && password === confirm;
+
+      if (strengthEl) {
+        if (!password) {
+          strengthEl.hidden = true;
+          strengthEl.dataset.level = "";
+          if (strengthLabel) strengthLabel.textContent = "";
+        } else {
+          strengthEl.hidden = false;
+          strengthEl.dataset.level = result.level;
+          if (strengthLabel) {
+            strengthLabel.textContent = `Strength: ${result.label}`;
+          }
+        }
+      }
+
+      if (strengthBar) {
+        strengthBar.style.width = password ? `${(result.score / 4) * 100}%` : "0%";
+      }
+
+      if (rulesEl) {
+        rulesEl.querySelectorAll("[data-rule]").forEach((item) => {
+          const key = item.getAttribute("data-rule");
+          const ok = Boolean(result.rules[key]);
+          item.classList.toggle("is-met", ok);
+          item.classList.toggle("is-unmet", Boolean(password) && !ok);
+        });
+      }
+
+      if (matchEl) {
+        if (!confirm) {
+          matchEl.textContent = "";
+          matchEl.className = "field-hint";
+        } else if (matches) {
+          matchEl.textContent = "Passwords match.";
+          matchEl.className = "field-hint is-ok";
+        } else {
+          matchEl.textContent = "Passwords do not match.";
+          matchEl.className = "field-hint is-error";
+        }
+      }
+
+      notify();
+    }
+
+    passwordEl.addEventListener("input", render);
+    confirmEl.addEventListener("input", render);
+    render();
+
+    return {
+      isValid: () => valid,
+      matchesConfirm: () => matches,
+    };
   }
 
   async function refreshAccessToken() {
@@ -222,7 +330,7 @@ const Auth = (() => {
     return response;
   }
 
-  return { login, logout, register, bindUsernameCheck, apiFetch };
+  return { login, logout, register, bindUsernameCheck, bindPasswordCheck, evaluatePassword, apiFetch };
 })();
 
 document.addEventListener("DOMContentLoaded", () => {
