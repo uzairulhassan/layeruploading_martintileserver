@@ -10,16 +10,7 @@
      data-map-id="{{ map_id }}"
      data-mapbox-token="{{ MAPBOX_ACCESS_TOKEN }}">
 
-  <div id="create-panel" class="create-panel hidden">
-    <h2>Create a new map</h2>
-    <div class="form-group">
-      <label for="new-map-name">Map name</label>
-      <input type="text" id="new-map-name" placeholder="e.g. Regional Land Use">
-    </div>
-    <button type="button" class="btn btn-primary" id="create-map-btn">Create map</button>
-  </div>
-
-  <div id="builder-panel" class="map-builder hidden">
+  <div id="builder-panel" class="map-builder">
     <aside class="map-sidebar">
       <div class="form-group">
         <label for="map-name-input">Map name</label>
@@ -53,24 +44,29 @@
 
 <div id="share-modal" class="modal-backdrop hidden">
   <div class="modal" role="dialog" aria-labelledby="builder-share-title">
-    <h2 id="builder-share-title">Share map</h2>
-    <div class="form-group">
-      <label for="share-search">Find user (username or email)</label>
-      <input type="text" id="share-search">
-      <div id="share-results" class="share-results muted"></div>
+    <div class="modal-header">
+      <h2 id="builder-share-title">Share map</h2>
+      <p class="modal-sub">Invite teammates to view or edit this map.</p>
     </div>
-    <div class="form-group">
-      <label for="share-permission">Permission</label>
-      <select id="share-permission">
-        <option value="view">View only</option>
-        <option value="edit">Can edit layers &amp; layout</option>
-      </select>
-    </div>
-    <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
-    <p class="share-heading">Currently shared with</p>
-    <ul id="share-list" class="share-list muted"></ul>
-    <div class="modal-actions">
-      <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+    <div class="modal-body">
+      <div class="form-group">
+        <label for="share-search">Find user (username or email)</label>
+        <input type="text" id="share-search">
+        <div id="share-results" class="share-results muted"></div>
+      </div>
+      <div class="form-group">
+        <label for="share-permission">Permission</label>
+        <select id="share-permission">
+          <option value="view">View only</option>
+          <option value="edit">Can edit layers &amp; layout</option>
+        </select>
+      </div>
+      <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
+      <p class="share-heading">Currently shared with</p>
+      <ul id="share-list" class="share-list muted"></ul>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+      </div>
     </div>
   </div>
 </div>

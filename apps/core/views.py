@@ -1,7 +1,8 @@
 from django.contrib.auth import logout as django_logout
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import redirect
-from django.views.generic import TemplateView, View
+from django.urls import reverse
+from django.views.generic import RedirectView, TemplateView, View
 
 from apps.accounts.models import User
 
@@ -69,11 +70,21 @@ class MapListPageView(LoginRequiredMixin, TemplateView):
     login_url = "core:login"
 
 
+class MapNewRedirectView(LoginRequiredMixin, RedirectView):
+    """/maps/new/ opens the create-map modal on the Maps page."""
+
+    permanent = False
+    login_url = "core:login"
+
+    def get_redirect_url(self, *args, **kwargs):
+        return f"{reverse('core:map_list')}?new=1"
+
+
 class MapBuilderPageView(LoginRequiredMixin, TemplateView):
     template_name = "maps/map_builder.html"
     login_url = "core:login"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["map_id"] = self.kwargs.get("map_id", "")
+        context["map_id"] = self.kwargs["map_id"]
         return context

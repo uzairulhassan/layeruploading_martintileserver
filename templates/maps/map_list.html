@@ -2,52 +2,81 @@
 {% load static %}
 {% block title %}Maps · GeoLayers{% endblock %}
 {% block content %}
-<div class="toolbar">
-  <div>
-    <h1>Maps</h1>
-    <p class="lede">Compose layers into saved, shareable web maps.</p>
+<div class="workspace">
+  <div class="workspace-header">
+    <div>
+      <h1>Maps</h1>
+      <p class="lede">Compose layers into saved, shareable web maps.</p>
+    </div>
+    <button type="button" class="btn btn-primary" id="open-create-map-modal">New map</button>
   </div>
-  <a class="btn btn-primary" href="{% url 'core:map_new' %}">New map</a>
+
+  <div class="workspace-panel">
+    <div class="data-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Layers</th>
+            <th>Owner</th>
+            <th>Access</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="maps-tbody">
+          <tr><td colspan="5" class="muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
-<div class="data-table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Layers</th>
-        <th>Owner</th>
-        <th>Access</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody id="maps-tbody">
-      <tr><td colspan="5" class="muted">Loading…</td></tr>
-    </tbody>
-  </table>
+<div id="create-map-modal" class="modal-backdrop hidden">
+  <div class="modal" role="dialog" aria-labelledby="create-map-title">
+    <div class="modal-header">
+      <h2 id="create-map-title">Create a new map</h2>
+      <p class="modal-sub">Name your project, then add and style layers in the builder.</p>
+    </div>
+    <form id="create-map-form" class="modal-form">
+      <div class="form-group">
+        <label for="new-map-name">Map name</label>
+        <input type="text" id="new-map-name" required placeholder="e.g. Regional Land Use" autocomplete="off">
+      </div>
+      <div id="create-map-error" class="error-text hidden" role="alert"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close-modal="create-map-modal">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="create-map-submit">Create map</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <div id="share-modal" class="modal-backdrop hidden">
   <div class="modal" role="dialog" aria-labelledby="share-map-title">
-    <h2 id="share-map-title">Share map</h2>
-    <input type="hidden" id="share-map-id">
-    <div class="form-group">
-      <label for="share-search">Find user (username or email)</label>
-      <input type="text" id="share-search">
-      <div id="share-results" class="share-results muted"></div>
+    <div class="modal-header">
+      <h2 id="share-map-title">Share map</h2>
+      <p class="modal-sub">Invite teammates to view or edit this map.</p>
     </div>
-    <div class="form-group">
-      <label for="share-permission">Permission</label>
-      <select id="share-permission">
-        <option value="view">View only</option>
-        <option value="edit">Can edit layers &amp; layout</option>
-      </select>
-    </div>
-    <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
-    <p class="share-heading">Currently shared with</p>
-    <ul id="share-list" class="share-list muted"></ul>
-    <div class="modal-actions">
-      <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+    <div class="modal-body">
+      <input type="hidden" id="share-map-id">
+      <div class="form-group">
+        <label for="share-search">Find user (username or email)</label>
+        <input type="text" id="share-search" placeholder="Search users">
+        <div id="share-results" class="share-results muted"></div>
+      </div>
+      <div class="form-group">
+        <label for="share-permission">Permission</label>
+        <select id="share-permission">
+          <option value="view">View only</option>
+          <option value="edit">Can edit layers &amp; layout</option>
+        </select>
+      </div>
+      <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
+      <p class="share-heading">Currently shared with</p>
+      <ul id="share-list" class="share-list muted"></ul>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+      </div>
     </div>
   </div>
 </div>

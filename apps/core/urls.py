@@ -12,6 +12,6 @@ urlpatterns = [
     path("logout/", views.LogoutView.as_view(), name="logout"),
     path("layers/", views.LayerListPageView.as_view(), name="layer_list"),
     path("maps/", views.MapListPageView.as_view(), name="map_list"),
-    path("maps/new/", views.MapBuilderPageView.as_view(), name="map_new"),
+    path("maps/new/", views.MapNewRedirectView.as_view(), name="map_new"),
     path("maps/<uuid:map_id>/", views.MapBuilderPageView.as_view(), name="map_builder"),
 ]

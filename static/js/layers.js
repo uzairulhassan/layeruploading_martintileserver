@@ -1,5 +1,6 @@
 let CURRENT_LAYERS = [];
 let SELECTED_SHARE_USER = null;
+let LAYER_FILTER = "all";
 
 function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
@@ -15,26 +16,88 @@ async function loadLayers() {
   renderLayers();
 }
 
+function filteredLayers() {
+  if (LAYER_FILTER === "owned") {
+    return CURRENT_LAYERS.filter((layer) => layer.my_permission === "owner");
+  }
+  if (LAYER_FILTER === "shared") {
+    return CURRENT_LAYERS.filter((layer) => layer.my_permission !== "owner");
+  }
+  return CURRENT_LAYERS;
+}
+
+function ownerLabel(layer) {
+  if (layer.my_permission === "owner") return "You";
+  return layer.owner_detail ? layer.owner_detail.display_name : "";
+}
+
+function descriptionLabel(layer) {
+  const text = (layer.description || "").trim();
+  return text || "—";
+}
+
+function emptyStateMessage() {
+  if (LAYER_FILTER === "owned") {
+    return { title: "No uploaded layers", body: "Upload a shapefile to add one." };
+  }
+  if (LAYER_FILTER === "shared") {
+    return { title: "No shared layers", body: "Layers shared with you will appear here." };
+  }
+  return { title: "No layers yet", body: "Upload a shapefile to get started." };
+}
+
+function actionIcon(name) {
+  const icons = {
+    style: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M13.5 6.5l3 3"/></svg>',
+    share: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.4 13.2l7.2 4.1M15.6 6.7l-7.2 4.1"/></svg>',
+    rename: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M8 16l9.2-9.2a1.8 1.8 0 0 0-2.5-2.5L5.5 13.5 4 20l6.5-1.5z"/></svg>',
+    delete: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14"/><path d="M9 7V5h6v2"/><path d="M8 7l1 12h6l1-12"/></svg>',
+  };
+  return icons[name] || "";
+}
+
+function actionButton(action, id, label, danger = false) {
+  return `
+    <button
+      type="button"
+      class="row-action${danger ? " is-danger" : ""}"
+      data-action="${action}"
+      data-id="${id}"
+      title="${label}"
+      aria-label="${label}"
+    >
+      ${actionIcon(action)}
+      <span>${label}</span>
+    </button>
+  `;
+}
+
 function renderLayers() {
   const tbody = document.getElementById("layers-tbody");
-  if (!CURRENT_LAYERS.length) {
-    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><strong>No layers yet</strong>Upload a shapefile to get started.</div></td></tr>`;
+  const layers = filteredLayers();
+  if (!layers.length) {
+    const empty = emptyStateMessage();
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><strong>${empty.title}</strong>${empty.body}</div></td></tr>`;
     return;
   }
-  tbody.innerHTML = CURRENT_LAYERS.map((layer) => `
+  tbody.innerHTML = layers.map((layer) => `
     <tr>
       <td>${layer.name}</td>
+      <td class="table-desc">${descriptionLabel(layer)}</td>
       <td>${layer.geometry_type}</td>
       <td>${layer.feature_count}</td>
-      <td>${layer.owner_detail ? layer.owner_detail.display_name : ""}</td>
+      <td>${ownerLabel(layer)}</td>
       <td><span class="badge">${layer.my_permission}</span></td>
       <td class="table-actions">
-        <button class="btn btn-sm" data-action="style" data-id="${layer.id}">Style</button>
-        <button class="btn btn-sm" data-action="share" data-id="${layer.id}">Share</button>
-        ${layer.my_permission === "owner" ? `
-          <button class="btn btn-sm" data-action="rename" data-id="${layer.id}">Rename</button>
-          <button class="btn btn-sm btn-danger" data-action="delete" data-id="${layer.id}">Delete</button>
-        ` : ""}
+        <div class="row-actions">
+          ${actionButton("style", layer.id, "Style")}
+          ${actionButton("share", layer.id, "Share")}
+          ${layer.my_permission === "owner" ? `
+            ${actionButton("rename", layer.id, "Rename")}
+            <span class="row-actions-sep" aria-hidden="true"></span>
+            ${actionButton("delete", layer.id, "Delete", true)}
+          ` : ""}
+        </div>
       </td>
     </tr>
   `).join("");
@@ -43,6 +106,18 @@ function renderLayers() {
     btn.addEventListener("click", () => handleRowAction(btn.dataset.action, btn.dataset.id));
   });
 }
+
+document.querySelectorAll("[data-layer-filter]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    LAYER_FILTER = btn.dataset.layerFilter;
+    document.querySelectorAll("[data-layer-filter]").forEach((item) => {
+      const active = item === btn;
+      item.classList.toggle("is-active", active);
+      item.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    renderLayers();
+  });
+});
 
 function findLayer(id) {
   return CURRENT_LAYERS.find((l) => String(l.id) === String(id));
@@ -53,7 +128,7 @@ function handleRowAction(action, id) {
   if (action === "style") openStyleModal(layer);
   if (action === "rename") openRenameModal(layer);
   if (action === "share") openShareModal(layer);
-  if (action === "delete") deleteLayer(layer);
+  if (action === "delete") openDeleteModal(layer);
 }
 
 // ---- Upload ----
@@ -113,11 +188,26 @@ document.getElementById("rename-form").addEventListener("submit", async (event) 
 });
 
 // ---- Delete ----
-async function deleteLayer(layer) {
-  if (!confirm(`Delete layer "${layer.name}"? This also drops its data table and cannot be undone.`)) return;
-  const res = await Auth.apiFetch(`/api/layers/${layer.id}/`, { method: "DELETE" });
-  if (res.ok || res.status === 204) await loadLayers();
+function openDeleteModal(layer) {
+  document.getElementById("delete-id").value = layer.id;
+  document.getElementById("delete-layer-name").textContent = layer.name;
+  openModal("delete-modal");
 }
+
+document.getElementById("delete-confirm").addEventListener("click", async () => {
+  const id = document.getElementById("delete-id").value;
+  const btn = document.getElementById("delete-confirm");
+  btn.disabled = true;
+  try {
+    const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "DELETE" });
+    if (res.ok || res.status === 204) {
+      closeModal("delete-modal");
+      await loadLayers();
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ---- Style & labels ----
 function normalizeHexColor(value, fallback) {
@@ -160,7 +250,7 @@ function openStyleModal(layer) {
 
   const labelSelect = document.getElementById("label-field");
   const fields = (layer.attribute_schema || []).map((f) => f.name);
-  labelSelect.innerHTML = `<option value="">(no labels)</option>` +
+  labelSelect.innerHTML = `<option value="">No labels</option>` +
     fields.map((f) => `<option value="${f}">${f}</option>`).join("");
 
   const labelConfig = layer.label_config || {};
@@ -199,62 +289,34 @@ document.getElementById("style-form").addEventListener("submit", async (event) =
   }
 });
 
-// ---- Share (people + XYZ) ----
+// ---- Share ----
 let SHARE_COPY_RESET = null;
 let CURRENT_SHARE_LAYER = null;
 
 function setShareTab(tab) {
+  const isXyz = tab === "xyz";
   const peopleTab = document.getElementById("share-tab-people");
   const xyzTab = document.getElementById("share-tab-xyz");
   const peoplePanel = document.getElementById("share-panel-people");
   const xyzPanel = document.getElementById("share-panel-xyz");
-  const isXyz = tab === "xyz";
+  const activePanel = isXyz ? xyzPanel : peoplePanel;
 
   peopleTab.classList.toggle("is-active", !isXyz);
   xyzTab.classList.toggle("is-active", isXyz);
   peopleTab.setAttribute("aria-selected", String(!isXyz));
   xyzTab.setAttribute("aria-selected", String(isXyz));
-
   peoplePanel.classList.toggle("is-active", !isXyz);
   xyzPanel.classList.toggle("is-active", isXyz);
-  if (isXyz) {
-    peoplePanel.hidden = true;
-    xyzPanel.hidden = false;
-    xyzPanel.classList.add("is-entering");
-    window.setTimeout(() => xyzPanel.classList.remove("is-entering"), 280);
-  } else {
-    xyzPanel.hidden = true;
-    peoplePanel.hidden = false;
-    peoplePanel.classList.add("is-entering");
-    window.setTimeout(() => peoplePanel.classList.remove("is-entering"), 280);
-  }
+
+  activePanel.classList.add("is-entering");
+  window.setTimeout(() => activePanel.classList.remove("is-entering"), 280);
 }
 
 function fillXyzShareFields(layer) {
   const xyzUrl = layer.xyz_url || `${layer.tile_url}/{z}/{x}/{y}`;
-  const sourceLayer = layer.source_layer || "";
-  const geometry = layer.suggested_geometry || "line";
-
-  const urlEl = document.getElementById("xyz-url");
-  const sourceEl = document.getElementById("xyz-source-layer");
-  const geomEl = document.getElementById("xyz-geometry");
-
-  urlEl.textContent = "";
-  sourceEl.textContent = "";
-  geomEl.textContent = "";
-
-  // Reveal text with a short staggered “live” reveal.
-  window.requestAnimationFrame(() => {
-    urlEl.textContent = xyzUrl;
-    urlEl.classList.add("is-revealed");
-    sourceEl.textContent = sourceLayer;
-    sourceEl.classList.add("is-revealed");
-    geomEl.textContent = geometry;
-    geomEl.classList.add("is-revealed");
-  });
-
-  urlEl.dataset.copyText = xyzUrl;
-  sourceEl.dataset.copyText = sourceLayer;
+  document.getElementById("xyz-url").textContent = xyzUrl;
+  document.getElementById("xyz-source-layer").textContent = layer.source_layer || "";
+  document.getElementById("xyz-geometry").textContent = layer.suggested_geometry || "line";
 }
 
 function openShareModal(layer) {
@@ -274,9 +336,6 @@ function openShareModal(layer) {
   });
   document.getElementById("xyz-copy-status").textContent = "";
   document.getElementById("xyz-copy-status").classList.remove("is-visible");
-  document.getElementById("xyz-url").classList.remove("is-revealed");
-  document.getElementById("xyz-source-layer").classList.remove("is-revealed");
-  document.getElementById("xyz-geometry").classList.remove("is-revealed");
 
   fillXyzShareFields(layer);
   if (isOwner) renderShareList(layer);
@@ -288,14 +347,13 @@ function renderShareList(layer) {
   const list = document.getElementById("share-list");
   const shares = layer.shares || [];
   if (!shares.length) {
-    list.innerHTML = `<li>Not shared with anyone yet.</li>`;
+    list.innerHTML = `<li class="share-empty">Not shared with anyone yet.</li>`;
     return;
   }
-  list.innerHTML = shares.map((s) => `
-    <li>${s.shared_with_detail.display_name} — ${s.permission}
-      <button class="btn btn-link" data-remove-share="${s.shared_with_detail.id}">remove</button>
-    </li>
-  `).join("");
+  list.innerHTML = shares.map((s) => Auth.renderSharePerson(s.shared_with_detail, {
+    permission: s.permission,
+    actionHtml: `<button type="button" class="btn btn-sm row-remove" data-remove-share="${s.shared_with_detail.id}">Remove</button>`,
+  })).join("");
   list.querySelectorAll("[data-remove-share]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const layerId = document.getElementById("share-layer-id").value;
@@ -321,14 +379,17 @@ document.getElementById("share-search").addEventListener("input", (event) => {
     const res = await Auth.apiFetch(`/api/auth/users/?search=${encodeURIComponent(query)}`);
     const data = await res.json();
     const results = data.results || data;
-    document.getElementById("share-results").innerHTML = results.map((u) => `
-      <div class="share-hit" data-user-id="${u.id}">${u.display_name} (${u.username})</div>
-    `).join("") || `<p class="muted">No users found.</p>`;
-    document.querySelectorAll("#share-results [data-user-id]").forEach((row) => {
+    const box = document.getElementById("share-results");
+    if (!results.length) {
+      box.innerHTML = `<p class="share-empty-inline muted">No users found.</p>`;
+      return;
+    }
+    box.innerHTML = `<div class="share-results-list">${results.map((u) => Auth.renderShareHit(u)).join("")}</div>`;
+    box.querySelectorAll("[data-user-id]").forEach((row) => {
       row.addEventListener("click", () => {
         SELECTED_SHARE_USER = results.find((u) => String(u.id) === row.dataset.userId);
-        document.getElementById("share-search").value = SELECTED_SHARE_USER.display_name;
-        document.getElementById("share-results").innerHTML = "";
+        document.getElementById("share-search").value = SELECTED_SHARE_USER.display_name || SELECTED_SHARE_USER.username;
+        box.innerHTML = "";
         document.getElementById("share-submit").disabled = false;
       });
     });
@@ -360,8 +421,8 @@ async function copyShareValue(kind, button) {
 
   const text =
     kind === "source"
-      ? (layer.source_layer || document.getElementById("xyz-source-layer").dataset.copyText || "")
-      : (layer.xyz_url || document.getElementById("xyz-url").dataset.copyText || "");
+      ? (layer.source_layer || "")
+      : (layer.xyz_url || `${layer.tile_url}/{z}/{x}/{y}`);
 
   const status = document.getElementById("xyz-copy-status");
   clearTimeout(SHARE_COPY_RESET);
@@ -372,7 +433,7 @@ async function copyShareValue(kind, button) {
       btn.classList.remove("is-copied");
     });
     button.classList.add("is-copied");
-    status.textContent = kind === "source" ? "Source layer copied." : "XYZ link copied.";
+    status.textContent = kind === "source" ? "Source layer copied." : "Tile URL copied.";
     status.classList.add("is-visible");
     SHARE_COPY_RESET = window.setTimeout(() => {
       button.classList.remove("is-copied");

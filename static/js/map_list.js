@@ -67,14 +67,13 @@ function renderShareList(map) {
   const list = document.getElementById("share-list");
   const shares = map.shares || [];
   if (!shares.length) {
-    list.innerHTML = `<li>Not shared with anyone yet.</li>`;
+    list.innerHTML = `<li class="share-empty">Not shared with anyone yet.</li>`;
     return;
   }
-  list.innerHTML = shares.map((s) => `
-    <li>${s.shared_with_detail.display_name} — ${s.permission}
-      <button class="btn btn-link" data-remove-share="${s.shared_with_detail.id}">remove</button>
-    </li>
-  `).join("");
+  list.innerHTML = shares.map((s) => Auth.renderSharePerson(s.shared_with_detail, {
+    permission: s.permission,
+    actionHtml: `<button type="button" class="btn btn-sm row-remove" data-remove-share="${s.shared_with_detail.id}">Remove</button>`,
+  })).join("");
   list.querySelectorAll("[data-remove-share]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const mapId = document.getElementById("share-map-id").value;
@@ -100,14 +99,17 @@ document.getElementById("share-search").addEventListener("input", (event) => {
     const res = await Auth.apiFetch(`/api/auth/users/?search=${encodeURIComponent(query)}`);
     const data = await res.json();
     const results = data.results || data;
-    document.getElementById("share-results").innerHTML = results.map((u) => `
-      <div class="share-hit" data-user-id="${u.id}">${u.display_name} (${u.username})</div>
-    `).join("") || `<p class="muted">No users found.</p>`;
-    document.querySelectorAll("#share-results [data-user-id]").forEach((row) => {
+    const box = document.getElementById("share-results");
+    if (!results.length) {
+      box.innerHTML = `<p class="share-empty-inline muted">No users found.</p>`;
+      return;
+    }
+    box.innerHTML = `<div class="share-results-list">${results.map((u) => Auth.renderShareHit(u)).join("")}</div>`;
+    box.querySelectorAll("[data-user-id]").forEach((row) => {
       row.addEventListener("click", () => {
         SELECTED_SHARE_USER = results.find((u) => String(u.id) === row.dataset.userId);
-        document.getElementById("share-search").value = SELECTED_SHARE_USER.display_name;
-        document.getElementById("share-results").innerHTML = "";
+        document.getElementById("share-search").value = SELECTED_SHARE_USER.display_name || SELECTED_SHARE_USER.username;
+        box.innerHTML = "";
         document.getElementById("share-submit").disabled = false;
       });
     });
@@ -129,4 +131,63 @@ document.getElementById("share-submit").addEventListener("click", async () => {
   document.getElementById("share-search").value = "";
 });
 
-document.addEventListener("DOMContentLoaded", loadMaps);
+function openCreateMapModal() {
+  const error = document.getElementById("create-map-error");
+  error.classList.add("hidden");
+  error.textContent = "";
+  document.getElementById("create-map-form").reset();
+  openModal("create-map-modal");
+  setTimeout(() => document.getElementById("new-map-name").focus(), 50);
+}
+
+document.getElementById("open-create-map-modal").addEventListener("click", openCreateMapModal);
+
+document.getElementById("create-map-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = document.getElementById("new-map-name").value.trim();
+  const error = document.getElementById("create-map-error");
+  const submitBtn = document.getElementById("create-map-submit");
+  error.classList.add("hidden");
+  error.textContent = "";
+  if (!name) {
+    error.textContent = "Enter a map name.";
+    error.classList.remove("hidden");
+    return;
+  }
+  submitBtn.disabled = true;
+  try {
+    const res = await Auth.apiFetch("/api/maps/", {
+      method: "POST",
+      body: {
+        name,
+        basemap_style: "mapbox://styles/mapbox/streets-v12",
+        center_lng: 0,
+        center_lat: 0,
+        zoom: 2,
+      },
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      error.textContent = data.detail || data.name?.[0] || "Could not create map.";
+      error.classList.remove("hidden");
+      return;
+    }
+    const data = await res.json();
+    window.location.href = `/maps/${data.id}/`;
+  } catch (err) {
+    console.error(err);
+    error.textContent = "Could not create map.";
+    error.classList.remove("hidden");
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+document.addEventListener("DOMContentLoaded", () => {
+  loadMaps();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("new") === "1") {
+    openCreateMapModal();
+    window.history.replaceState({}, "", "/maps/");
+  }
+});

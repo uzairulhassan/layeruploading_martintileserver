@@ -15,7 +15,7 @@
     <nav class="topbar-nav" aria-label="Main">
       <a href="{% url 'core:dashboard' %}" {% if request.resolver_match.url_name == 'dashboard' %}class="is-active"{% endif %}>Dashboard</a>
       <a href="{% url 'core:layer_list' %}" {% if request.resolver_match.url_name == 'layer_list' %}class="is-active"{% endif %}>Layers</a>
-      <a href="{% url 'core:map_list' %}" {% if request.resolver_match.url_name == 'map_list' or request.resolver_match.url_name == 'map_new' or request.resolver_match.url_name == 'map_builder' %}class="is-active"{% endif %}>Maps</a>
+      <a href="{% url 'core:map_list' %}" {% if request.resolver_match.url_name == 'map_list' or request.resolver_match.url_name == 'map_builder' %}class="is-active"{% endif %}>Maps</a>
     </nav>
 
     <div class="user-menu">

@@ -330,7 +330,71 @@ const Auth = (() => {
     return response;
   }
 
-  return { login, logout, register, bindUsernameCheck, bindPasswordCheck, evaluatePassword, apiFetch };
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function userInitials(user) {
+    const source = String(user?.display_name || user?.username || "?").trim();
+    const parts = source.split(/[\s._-]+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return source.slice(0, 2).toUpperCase();
+  }
+
+  function personMeta(user) {
+    const email = user?.email ? escapeHtml(user.email) : "";
+    if (email) return `<span class="person-email">${email}</span>`;
+    return "";
+  }
+
+  function renderShareHit(user) {
+    const meta = personMeta(user);
+    return `
+      <button type="button" class="person-row share-hit" data-user-id="${escapeHtml(user.id)}">
+        <span class="person-avatar" aria-hidden="true">${escapeHtml(userInitials(user))}</span>
+        <span class="person-copy">
+          <span class="person-name">${escapeHtml(user.display_name || user.username)}</span>
+          ${meta ? `<span class="person-meta">${meta}</span>` : ""}
+        </span>
+      </button>
+    `;
+  }
+
+  function renderSharePerson(user, { permission = "", actionHtml = "" } = {}) {
+    const perm = permission
+      ? `<span class="person-perm">${escapeHtml(permission)}</span>`
+      : "";
+    const meta = personMeta(user);
+    return `
+      <li class="person-row">
+        <span class="person-avatar" aria-hidden="true">${escapeHtml(userInitials(user))}</span>
+        <span class="person-copy">
+          <span class="person-name">${escapeHtml(user.display_name || user.username)}${perm}</span>
+          ${meta ? `<span class="person-meta">${meta}</span>` : ""}
+        </span>
+        ${actionHtml}
+      </li>
+    `;
+  }
+
+  return {
+    login,
+    logout,
+    register,
+    bindUsernameCheck,
+    bindPasswordCheck,
+    evaluatePassword,
+    apiFetch,
+    renderShareHit,
+    renderSharePerson,
+  };
 })();
 
 document.addEventListener("DOMContentLoaded", () => {

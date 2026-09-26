@@ -2,55 +2,94 @@
 {% load static %}
 {% block title %}Dashboard · GeoLayers{% endblock %}
 {% block content %}
-<header class="page-header">
-  <div>
-    <p class="welcome-kicker">Dashboard</p>
-    <h1 class="welcome-title">Welcome, {{ user.get_full_name|default:user.username }}</h1>
-    <p class="lede">Manage spatial layers and compose maps from one place.</p>
-  </div>
-</header>
+<div class="dashboard">
+  <section class="dash-hero">
+    <div class="dash-hero-copy">
+      <p class="page-kicker">Dashboard</p>
+      <h1 class="dash-hero-title">Welcome, {{ user.get_full_name|default:user.username }}</h1>
+      <p class="lede">Manage spatial layers and compose maps from one place.</p>
+    </div>
+    <div class="dash-hero-actions">
+      <a class="btn btn-primary" href="{% url 'core:layer_list' %}">Upload layer</a>
+      <a class="btn" href="{% url 'core:map_list' %}?new=1">New map</a>
+    </div>
+  </section>
 
-<div class="section-split">
-  <section>
-    <p class="stat-label">Layers</p>
-    <p class="stat-value" id="layer-count-num">—</p>
-    <p class="stat-copy" id="layer-count">Loading…</p>
-    <a class="btn btn-primary" href="{% url 'core:layer_list' %}">Manage layers</a>
-  </section>
-  <section>
-    <p class="stat-label">Maps</p>
-    <p class="stat-value" id="map-count-num">—</p>
-    <p class="stat-copy" id="map-count">Loading…</p>
-    <a class="btn btn-primary" href="{% url 'core:map_list' %}">Manage maps</a>
-  </section>
+  <div class="dash-grid">
+    <a class="dash-tile" href="{% url 'core:layer_list' %}">
+      <div class="dash-tile-head">
+        <span class="dash-tile-label">Layers uploaded</span>
+      </div>
+      <p class="dash-tile-value" id="owned-layers-num">—</p>
+      <p class="dash-tile-copy" id="owned-layers-copy">Loading…</p>
+      <span class="dash-tile-cta">View your layers</span>
+    </a>
+
+    <a class="dash-tile" href="{% url 'core:layer_list' %}">
+      <div class="dash-tile-head">
+        <span class="dash-tile-label">Shared layers</span>
+      </div>
+      <p class="dash-tile-value" id="shared-layers-num">—</p>
+      <p class="dash-tile-copy" id="shared-layers-copy">Loading…</p>
+      <span class="dash-tile-cta">View shared layers</span>
+    </a>
+
+    <a class="dash-tile" href="{% url 'core:map_list' %}">
+      <div class="dash-tile-head">
+        <span class="dash-tile-label">Maps created</span>
+      </div>
+      <p class="dash-tile-value" id="owned-maps-num">—</p>
+      <p class="dash-tile-copy" id="owned-maps-copy">Loading…</p>
+      <span class="dash-tile-cta">View your maps</span>
+    </a>
+
+    <a class="dash-tile" href="{% url 'core:map_list' %}">
+      <div class="dash-tile-head">
+        <span class="dash-tile-label">Shared maps</span>
+      </div>
+      <p class="dash-tile-value" id="shared-maps-num">—</p>
+      <p class="dash-tile-copy" id="shared-maps-copy">Loading…</p>
+      <span class="dash-tile-cta">View shared maps</span>
+    </a>
+  </div>
 </div>
 {% endblock %}
 {% block extra_scripts %}
 <script>
 document.addEventListener("DOMContentLoaded", async () => {
+  const setTile = (numId, copyId, count, one, many) => {
+    document.getElementById(numId).textContent = count;
+    document.getElementById(copyId).textContent = count === 1 ? one : many.replace("%n", count);
+  };
+
   try {
     const [layersRes, mapsRes] = await Promise.all([
       Auth.apiFetch("/api/layers/"),
       Auth.apiFetch("/api/maps/"),
     ]);
-    const layers = await layersRes.json();
-    const maps = await mapsRes.json();
-    const layerN = layers.count ?? (layers.results || layers).length ?? 0;
-    const mapN = maps.count ?? (maps.results || maps).length ?? 0;
-    document.getElementById("layer-count-num").textContent = layerN;
-    document.getElementById("map-count-num").textContent = mapN;
-    document.getElementById("layer-count").textContent =
-      layerN === 1
-        ? "1 layer uploaded or shared with you."
-        : `${layerN} layers uploaded or shared with you.`;
-    document.getElementById("map-count").textContent =
-      mapN === 1
-        ? "1 map created or shared with you."
-        : `${mapN} maps created or shared with you.`;
+    const layersPayload = await layersRes.json();
+    const mapsPayload = await mapsRes.json();
+    const layers = layersPayload.results || layersPayload;
+    const maps = mapsPayload.results || mapsPayload;
+
+    const ownedLayers = layers.filter((l) => l.my_permission === "owner").length;
+    const sharedLayers = layers.filter((l) => l.my_permission !== "owner").length;
+    const ownedMaps = maps.filter((m) => m.my_permission === "owner").length;
+    const sharedMaps = maps.filter((m) => m.my_permission !== "owner").length;
+
+    setTile("owned-layers-num", "owned-layers-copy", ownedLayers,
+      "1 layer you uploaded.", "%n layers you uploaded.");
+    setTile("shared-layers-num", "shared-layers-copy", sharedLayers,
+      "1 layer shared with you.", "%n layers shared with you.");
+    setTile("owned-maps-num", "owned-maps-copy", ownedMaps,
+      "1 map you created.", "%n maps you created.");
+    setTile("shared-maps-num", "shared-maps-copy", sharedMaps,
+      "1 map shared with you.", "%n maps shared with you.");
   } catch (err) {
     console.error(err);
-    document.getElementById("layer-count").textContent = "Could not load layer summary.";
-    document.getElementById("map-count").textContent = "Could not load map summary.";
+    ["owned-layers-copy", "shared-layers-copy", "owned-maps-copy", "shared-maps-copy"].forEach((id) => {
+      document.getElementById(id).textContent = "Could not load summary.";
+    });
   }
 });
 </script>

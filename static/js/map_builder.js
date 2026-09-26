@@ -31,28 +31,7 @@ async function init() {
   const root = document.getElementById("builder-root");
   mapboxgl.accessToken = root.dataset.mapboxToken || "";
   MAP_ID = root.dataset.mapId || "";
-
-  if (!MAP_ID) {
-    document.getElementById("create-panel").classList.remove("hidden");
-    document.getElementById("create-map-btn").addEventListener("click", createMap);
-    return;
-  }
-
-  document.getElementById("builder-panel").classList.remove("hidden");
   await loadMap();
-}
-
-async function createMap() {
-  const name = document.getElementById("new-map-name").value.trim();
-  if (!name) return;
-  const res = await Auth.apiFetch("/api/maps/", {
-    method: "POST",
-    body: { name, basemap_style: "mapbox://styles/mapbox/streets-v12", center_lng: 0, center_lat: 0, zoom: 2 },
-  });
-  if (res.ok) {
-    const data = await res.json();
-    window.location.href = `/maps/${data.id}/`;
-  }
 }
 
 async function loadMap() {
@@ -441,14 +420,13 @@ function renderShareList() {
   const list = document.getElementById("share-list");
   const shares = MAP_DATA.shares || [];
   if (!shares.length) {
-    list.innerHTML = `<li>Not shared with anyone yet.</li>`;
+    list.innerHTML = `<li class="share-empty">Not shared with anyone yet.</li>`;
     return;
   }
-  list.innerHTML = shares.map((s) => `
-    <li>${s.shared_with_detail.display_name} — ${s.permission}
-      <button class="btn btn-link" data-remove-share="${s.shared_with_detail.id}">remove</button>
-    </li>
-  `).join("");
+  list.innerHTML = shares.map((s) => Auth.renderSharePerson(s.shared_with_detail, {
+    permission: s.permission,
+    actionHtml: `<button type="button" class="btn btn-sm row-remove" data-remove-share="${s.shared_with_detail.id}">Remove</button>`,
+  })).join("");
   list.querySelectorAll("[data-remove-share]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       await Auth.apiFetch(`/api/maps/${MAP_ID}/unshare/`, { method: "POST", body: { user_id: btn.dataset.removeShare } });
@@ -470,14 +448,17 @@ document.getElementById("share-search").addEventListener("input", (event) => {
     const res = await Auth.apiFetch(`/api/auth/users/?search=${encodeURIComponent(query)}`);
     const data = await res.json();
     const results = data.results || data;
-    document.getElementById("share-results").innerHTML = results.map((u) => `
-      <div class="share-hit" data-user-id="${u.id}">${u.display_name} (${u.username})</div>
-    `).join("") || `<p class="muted">No users found.</p>`;
-    document.querySelectorAll("#share-results [data-user-id]").forEach((row) => {
+    const box = document.getElementById("share-results");
+    if (!results.length) {
+      box.innerHTML = `<p class="share-empty-inline muted">No users found.</p>`;
+      return;
+    }
+    box.innerHTML = `<div class="share-results-list">${results.map((u) => Auth.renderShareHit(u)).join("")}</div>`;
+    box.querySelectorAll("[data-user-id]").forEach((row) => {
       row.addEventListener("click", () => {
         SELECTED_SHARE_USER = results.find((u) => String(u.id) === row.dataset.userId);
-        document.getElementById("share-search").value = SELECTED_SHARE_USER.display_name;
-        document.getElementById("share-results").innerHTML = "";
+        document.getElementById("share-search").value = SELECTED_SHARE_USER.display_name || SELECTED_SHARE_USER.username;
+        box.innerHTML = "";
         document.getElementById("share-submit").disabled = false;
       });
     });
