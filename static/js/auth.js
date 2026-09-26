@@ -384,6 +384,22 @@ const Auth = (() => {
     `;
   }
 
+  function openModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove("hidden");
+  }
+
+  function closeModal(id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add("hidden");
+  }
+
+  function bindModalClosers() {
+    document.querySelectorAll("[data-close-modal]").forEach((btn) => {
+      btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
+    });
+  }
+
   return {
     login,
     logout,
@@ -392,12 +408,17 @@ const Auth = (() => {
     bindPasswordCheck,
     evaluatePassword,
     apiFetch,
+    openModal,
+    closeModal,
+    bindModalClosers,
     renderShareHit,
     renderSharePerson,
   };
 })();
 
 document.addEventListener("DOMContentLoaded", () => {
+  Auth.bindModalClosers();
+
   const logoutBtn = document.getElementById("logout-btn");
   if (logoutBtn) logoutBtn.addEventListener("click", () => Auth.logout());
 

@@ -1,13 +1,10 @@
 let CURRENT_MAPS = [];
 let SELECTED_SHARE_USER = null;
+let MAP_FILTER = "all";
 
-function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
-function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
-document.querySelectorAll("[data-close-modal]").forEach((btn) => {
-  btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
-});
-
-function findMap(id) { return CURRENT_MAPS.find((m) => String(m.id) === String(id)); }
+function findMap(id) {
+  return CURRENT_MAPS.find((m) => String(m.id) === String(id));
+}
 
 async function loadMaps() {
   const res = await Auth.apiFetch("/api/maps/");
@@ -16,24 +13,88 @@ async function loadMaps() {
   renderMaps();
 }
 
+function filteredMaps() {
+  if (MAP_FILTER === "owned") {
+    return CURRENT_MAPS.filter((map) => map.my_permission === "owner");
+  }
+  if (MAP_FILTER === "shared") {
+    return CURRENT_MAPS.filter((map) => map.my_permission !== "owner");
+  }
+  return CURRENT_MAPS;
+}
+
+function ownerLabel(map) {
+  if (map.my_permission === "owner") return "You";
+  return map.owner_detail ? map.owner_detail.display_name : "";
+}
+
+function emptyStateMessage() {
+  if (MAP_FILTER === "owned") {
+    return { title: "No created maps", body: "Create a map to get started." };
+  }
+  if (MAP_FILTER === "shared") {
+    return { title: "No shared maps", body: "Maps shared with you will appear here." };
+  }
+  return { title: "No maps yet", body: "Create one to overlay your layers." };
+}
+
+function actionIcon(name) {
+  const icons = {
+    open: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5"/><path d="M10 14L19 5"/><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>',
+    share: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.4 13.2l7.2 4.1M15.6 6.7l-7.2 4.1"/></svg>',
+    delete: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14"/><path d="M9 7V5h6v2"/><path d="M8 7l1 12h6l1-12"/></svg>',
+  };
+  return icons[name] || "";
+}
+
+function actionButton(action, id, label, danger = false) {
+  return `
+    <button
+      type="button"
+      class="row-action${danger ? " is-danger" : ""}"
+      data-action="${action}"
+      data-id="${id}"
+      title="${label}"
+      aria-label="${label}"
+    >
+      ${actionIcon(action)}
+      <span>${label}</span>
+    </button>
+  `;
+}
+
+function actionLink(href, icon, label) {
+  return `
+    <a class="row-action" href="${href}" title="${label}" aria-label="${label}">
+      ${actionIcon(icon)}
+      <span>${label}</span>
+    </a>
+  `;
+}
+
 function renderMaps() {
   const tbody = document.getElementById("maps-tbody");
-  if (!CURRENT_MAPS.length) {
-    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><strong>No maps yet</strong>Create one to overlay your layers.</div></td></tr>`;
+  const maps = filteredMaps();
+  if (!maps.length) {
+    const empty = emptyStateMessage();
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><strong>${empty.title}</strong>${empty.body}</div></td></tr>`;
     return;
   }
-  tbody.innerHTML = CURRENT_MAPS.map((map) => `
+  tbody.innerHTML = maps.map((map) => `
     <tr>
       <td><a href="/maps/${map.id}/">${map.name}</a></td>
       <td>${map.map_layers.length}</td>
-      <td>${map.owner_detail.display_name}</td>
+      <td>${ownerLabel(map)}</td>
       <td><span class="badge">${map.my_permission}</span></td>
       <td class="table-actions">
-        <a class="btn btn-sm" href="/maps/${map.id}/">Open</a>
-        ${map.my_permission === "owner" ? `
-          <button class="btn btn-sm" data-action="share" data-id="${map.id}">Share</button>
-          <button class="btn btn-sm btn-danger" data-action="delete" data-id="${map.id}">Delete</button>
-        ` : ""}
+        <div class="row-actions">
+          ${actionLink(`/maps/${map.id}/`, "open", "Open")}
+          ${map.my_permission === "owner" ? `
+            ${actionButton("share", map.id, "Share")}
+            <span class="row-actions-sep" aria-hidden="true"></span>
+            ${actionButton("delete", map.id, "Delete", true)}
+          ` : ""}
+        </div>
       </td>
     </tr>
   `).join("");
@@ -42,16 +103,43 @@ function renderMaps() {
     btn.addEventListener("click", () => {
       const map = findMap(btn.dataset.id);
       if (btn.dataset.action === "share") openShareModal(map);
-      if (btn.dataset.action === "delete") deleteMap(map);
+      if (btn.dataset.action === "delete") openDeleteModal(map);
     });
   });
 }
 
-async function deleteMap(map) {
-  if (!confirm(`Delete map "${map.name}"? This cannot be undone.`)) return;
-  const res = await Auth.apiFetch(`/api/maps/${map.id}/`, { method: "DELETE" });
-  if (res.ok || res.status === 204) await loadMaps();
+document.querySelectorAll("[data-map-filter]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    MAP_FILTER = btn.dataset.mapFilter;
+    document.querySelectorAll("[data-map-filter]").forEach((item) => {
+      const active = item === btn;
+      item.classList.toggle("is-active", active);
+      item.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    renderMaps();
+  });
+});
+
+function openDeleteModal(map) {
+  document.getElementById("delete-id").value = map.id;
+  document.getElementById("delete-map-name").textContent = map.name;
+  Auth.openModal("delete-modal");
 }
+
+document.getElementById("delete-confirm").addEventListener("click", async () => {
+  const id = document.getElementById("delete-id").value;
+  const btn = document.getElementById("delete-confirm");
+  btn.disabled = true;
+  try {
+    const res = await Auth.apiFetch(`/api/maps/${id}/`, { method: "DELETE" });
+    if (res.ok || res.status === 204) {
+      Auth.closeModal("delete-modal");
+      await loadMaps();
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 function openShareModal(map) {
   document.getElementById("share-map-id").value = map.id;
@@ -60,7 +148,7 @@ function openShareModal(map) {
   document.getElementById("share-submit").disabled = true;
   SELECTED_SHARE_USER = null;
   renderShareList(map);
-  openModal("share-modal");
+  Auth.openModal("share-modal");
 }
 
 function renderShareList(map) {
@@ -136,7 +224,7 @@ function openCreateMapModal() {
   error.classList.add("hidden");
   error.textContent = "";
   document.getElementById("create-map-form").reset();
-  openModal("create-map-modal");
+  Auth.openModal("create-map-modal");
   setTimeout(() => document.getElementById("new-map-name").focus(), 50);
 }
 

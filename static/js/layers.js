@@ -2,13 +2,6 @@ let CURRENT_LAYERS = [];
 let SELECTED_SHARE_USER = null;
 let LAYER_FILTER = "all";
 
-function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
-function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
-
-document.querySelectorAll("[data-close-modal]").forEach((btn) => {
-  btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
-});
-
 async function loadLayers() {
   const res = await Auth.apiFetch("/api/layers/");
   const data = await res.json();
@@ -132,7 +125,7 @@ function handleRowAction(action, id) {
 }
 
 // ---- Upload ----
-document.getElementById("open-upload-modal").addEventListener("click", () => openModal("upload-modal"));
+document.getElementById("open-upload-modal").addEventListener("click", () => Auth.openModal("upload-modal"));
 
 document.getElementById("upload-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -154,7 +147,7 @@ document.getElementById("upload-form").addEventListener("submit", async (event) 
       throw new Error(body.detail || JSON.stringify(body));
     }
     document.getElementById("upload-form").reset();
-    closeModal("upload-modal");
+    Auth.closeModal("upload-modal");
     await loadLayers();
   } catch (err) {
     errorBox.textContent = err.message;
@@ -170,7 +163,7 @@ function openRenameModal(layer) {
   document.getElementById("rename-id").value = layer.id;
   document.getElementById("rename-name").value = layer.name;
   document.getElementById("rename-description").value = layer.description || "";
-  openModal("rename-modal");
+  Auth.openModal("rename-modal");
 }
 
 document.getElementById("rename-form").addEventListener("submit", async (event) => {
@@ -182,7 +175,7 @@ document.getElementById("rename-form").addEventListener("submit", async (event) 
   };
   const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "PATCH", body: payload });
   if (res.ok) {
-    closeModal("rename-modal");
+    Auth.closeModal("rename-modal");
     await loadLayers();
   }
 });
@@ -191,7 +184,7 @@ document.getElementById("rename-form").addEventListener("submit", async (event) 
 function openDeleteModal(layer) {
   document.getElementById("delete-id").value = layer.id;
   document.getElementById("delete-layer-name").textContent = layer.name;
-  openModal("delete-modal");
+  Auth.openModal("delete-modal");
 }
 
 document.getElementById("delete-confirm").addEventListener("click", async () => {
@@ -201,7 +194,7 @@ document.getElementById("delete-confirm").addEventListener("click", async () => 
   try {
     const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "DELETE" });
     if (res.ok || res.status === 204) {
-      closeModal("delete-modal");
+      Auth.closeModal("delete-modal");
       await loadLayers();
     }
   } finally {
@@ -263,7 +256,7 @@ function openStyleModal(layer) {
     el.disabled = !canEdit;
   });
 
-  openModal("style-modal");
+  Auth.openModal("style-modal");
 }
 
 document.getElementById("style-form").addEventListener("submit", async (event) => {
@@ -284,7 +277,7 @@ document.getElementById("style-form").addEventListener("submit", async (event) =
   };
   const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "PATCH", body: payload });
   if (res.ok) {
-    closeModal("style-modal");
+    Auth.closeModal("style-modal");
     await loadLayers();
   }
 });
@@ -340,7 +333,7 @@ function openShareModal(layer) {
   fillXyzShareFields(layer);
   if (isOwner) renderShareList(layer);
   setShareTab("people");
-  openModal("share-modal");
+  Auth.openModal("share-modal");
 }
 
 function renderShareList(layer) {

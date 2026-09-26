@@ -805,6 +805,7 @@ th.table-actions {
   font-size: 0.78rem;
   font-weight: 600;
   line-height: 1;
+  text-decoration: none;
   cursor: pointer;
   transition: background var(--ease), color var(--ease);
 }
@@ -823,6 +824,7 @@ th.table-actions {
 .row-action:hover {
   background: var(--white);
   color: var(--navy-hover);
+  text-decoration: none;
   box-shadow: 0 1px 2px rgba(15, 45, 83, 0.08);
 }
 
@@ -1711,20 +1713,11 @@ button.person-row.share-hit:hover {
   line-height: 1.3;
 }
 
-.person-username,
 .person-email {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
-}
-
-.person-dot {
-  width: 0.22rem;
-  height: 0.22rem;
-  border-radius: 50%;
-  background: rgba(15, 45, 83, 0.35);
-  flex-shrink: 0;
 }
 
 .person-perm {
@@ -1756,19 +1749,301 @@ button.person-row.share-hit:hover {
 /* —— Map builder —— */
 .map-builder {
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: 320px 1fr;
   height: calc(100vh - var(--topbar-h));
 }
 
 .map-sidebar {
-  border-right: 1px solid var(--navy-line);
+  border-right: 1px solid var(--navy-line-strong);
   background: var(--white);
   overflow-y: auto;
-  padding: 1.15rem 1.1rem 2rem;
+  padding: 1.2rem 1.1rem 2rem;
 }
 
-.map-sidebar h3 {
-  margin-top: 1.5rem;
+.builder-block {
+  margin-bottom: 0.95rem;
+}
+
+.builder-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--navy-muted);
+}
+
+.builder-block select {
+  width: 100%;
+  padding: 0.62rem 0.75rem;
+  border: 1px solid var(--navy-line-strong);
+  border-radius: var(--radius);
+  background: rgba(15, 45, 83, 0.02);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  color: var(--navy);
+}
+
+.builder-block select:focus {
+  outline: none;
+  border-color: var(--navy);
+  background: var(--white);
+  box-shadow: 0 0 0 3px rgba(15, 45, 83, 0.1);
+}
+
+.name-edit-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.name-edit-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.62rem 0.75rem;
+  border: 1px solid var(--navy-line-strong);
+  border-radius: var(--radius);
+  background: rgba(15, 45, 83, 0.03);
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.name-edit-input:focus {
+  outline: none;
+}
+
+.name-edit-input.is-editing {
+  background: var(--white);
+  box-shadow: 0 0 0 3px rgba(15, 45, 83, 0.1);
+}
+
+.name-edit-input:not(.is-editing) {
+  cursor: default;
+}
+
+.name-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.45rem;
+  flex-shrink: 0;
+  border: 1px solid var(--navy-line-strong);
+  border-radius: var(--radius);
+  background: rgba(15, 45, 83, 0.03);
+  color: var(--navy);
+  cursor: pointer;
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+
+.name-edit-btn svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.name-edit-btn:hover,
+.name-edit-btn.is-active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: var(--white);
+}
+
+.builder-actions {
+  margin: 0.35rem 0 0.9rem;
+}
+
+.access-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--navy-line-strong);
+  border-radius: var(--radius);
+  background: rgba(15, 45, 83, 0.03);
+}
+
+.access-badge-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--navy-muted);
+}
+
+.access-badge-value {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.access-badge.is-owner {
+  border-color: rgba(15, 45, 83, 0.35);
+  background: rgba(15, 45, 83, 0.06);
+}
+
+.access-badge.is-owner .access-badge-value {
+  color: var(--navy);
+}
+
+.access-badge.is-edit {
+  border-color: rgba(31, 143, 95, 0.35);
+  background: rgba(31, 143, 95, 0.08);
+}
+
+.access-badge.is-edit .access-badge-value {
+  color: #1b6b3a;
+}
+
+.access-badge.is-view {
+  border-color: rgba(15, 45, 83, 0.18);
+  background: rgba(15, 45, 83, 0.03);
+}
+
+.builder-section {
+  margin-top: 0.35rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--navy-line);
+}
+
+.builder-section-head h3 {
+  margin: 0 0 0.75rem;
+}
+
+.builder-layer-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.builder-empty {
+  padding: 0.85rem 0.9rem;
+  border: 1px dashed var(--navy-line);
+  border-radius: var(--radius);
+  color: var(--navy-muted);
+  font-size: 0.86rem;
+}
+
+.builder-layer-card {
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--navy-line);
+  border-radius: var(--radius);
+  background: rgba(15, 45, 83, 0.02);
+}
+
+.builder-layer-card.is-available {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.builder-layer-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.builder-layer-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
+}
+
+.builder-layer-check input {
+  accent-color: var(--navy);
+  flex-shrink: 0;
+}
+
+.builder-layer-card .layer-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.builder-layer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.layer-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  border: 1px solid var(--navy-line);
+  border-radius: var(--radius);
+  background: var(--white);
+  color: var(--navy);
+  cursor: pointer;
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+
+.layer-icon-btn svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.layer-icon-btn:hover {
+  border-color: var(--navy);
+  background: rgba(15, 45, 83, 0.04);
+}
+
+.layer-icon-btn.is-danger {
+  color: var(--danger);
+  border-color: rgba(180, 35, 24, 0.28);
+}
+
+.layer-icon-btn.is-danger:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+.builder-layer-opacity {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--navy-line);
+}
+
+.builder-opacity-label {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--navy-muted);
+}
+
+.builder-layer-opacity input[type="range"] {
+  flex: 1;
+  accent-color: var(--navy);
 }
 
 #map-canvas {
@@ -1776,37 +2051,6 @@ button.person-row.share-hit:hover {
   height: 100%;
   min-height: 280px;
   background: #e8eef4;
-}
-
-.layer-row {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.55rem 0;
-  border-bottom: 1px solid var(--navy-line);
-}
-
-.layer-row .layer-name {
-  flex: 1;
-  font-size: 0.875rem;
-  font-weight: 500;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.layer-row input[type="range"] {
-  width: 58px;
-  accent-color: var(--navy);
-}
-
-.layer-row input[type="checkbox"] {
-  accent-color: var(--navy);
-}
-
-.permission-note {
-  margin-top: 0.65rem;
 }
 
 .builder-error {

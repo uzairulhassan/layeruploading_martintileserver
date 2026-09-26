@@ -5,12 +5,6 @@ let MAP_ID = null;
 let SELECTED_SHARE_USER = null;
 const ADDED_MAPBOX_LAYER_IDS = [];
 
-function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
-function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
-document.querySelectorAll("[data-close-modal]").forEach((btn) => {
-  btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
-});
-
 function tableNameFromTileUrl(tileUrl) {
   return (tileUrl || "").split("/").filter(Boolean).pop();
 }
@@ -42,19 +36,33 @@ async function loadMap() {
   }
   MAP_DATA = await res.json();
 
-  document.getElementById("map-name-input").value = MAP_DATA.name;
+  const nameInput = document.getElementById("map-name-input");
+  nameInput.value = MAP_DATA.name;
+  nameInput.readOnly = true;
+  nameInput.classList.remove("is-editing");
+
   document.getElementById("basemap-select").value = MAP_DATA.basemap_style;
 
   const readOnly = MAP_DATA.my_permission === "view";
-  document.getElementById("permission-note").textContent = readOnly
-    ? "You have view-only access to this map."
-    : `Your access: ${MAP_DATA.my_permission}`;
+  const accessValue = document.getElementById("permission-value");
+  const accessBadge = document.getElementById("access-badge");
+  accessBadge.classList.remove("is-owner", "is-edit", "is-view");
+  if (readOnly) {
+    accessValue.textContent = "View only";
+    accessBadge.classList.add("is-view");
+  } else if (MAP_DATA.my_permission === "owner") {
+    accessValue.textContent = "Owner";
+    accessBadge.classList.add("is-owner");
+  } else {
+    accessValue.textContent = "Can edit";
+    accessBadge.classList.add("is-edit");
+  }
+
   document.getElementById("save-map-btn").classList.toggle("hidden", readOnly);
   document.getElementById("share-map-btn").classList.toggle("hidden", MAP_DATA.my_permission !== "owner");
-  document.getElementById("map-name-input").disabled = readOnly;
+  document.getElementById("edit-map-name-btn").classList.toggle("hidden", readOnly);
   document.getElementById("basemap-select").disabled = readOnly;
-  document.querySelector("#builder-panel .map-sidebar h3:last-of-type").classList.toggle("hidden", readOnly);
-  document.getElementById("available-layers").classList.toggle("hidden", readOnly);
+  document.getElementById("available-layers-section").classList.toggle("hidden", readOnly);
 
   if (!GL_MAP) {
     GL_MAP = new mapboxgl.Map({
@@ -85,26 +93,86 @@ async function loadMap() {
   };
 }
 
+function setMapNameEditing(enabled) {
+  const input = document.getElementById("map-name-input");
+  const btn = document.getElementById("edit-map-name-btn");
+  if (!input || !btn || btn.classList.contains("hidden")) return;
+  input.readOnly = !enabled;
+  input.classList.toggle("is-editing", enabled);
+  btn.classList.toggle("is-active", enabled);
+  btn.title = enabled ? "Done editing" : "Edit map name";
+  btn.setAttribute("aria-label", enabled ? "Done editing" : "Edit map name");
+  if (enabled) {
+    input.focus();
+    input.select();
+  } else {
+    input.blur();
+  }
+}
+
+document.getElementById("edit-map-name-btn").addEventListener("mousedown", (event) => {
+  event.preventDefault();
+});
+
+document.getElementById("edit-map-name-btn").addEventListener("click", () => {
+  const input = document.getElementById("map-name-input");
+  setMapNameEditing(input.readOnly);
+});
+
+document.getElementById("map-name-input").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    setMapNameEditing(false);
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.target.value = MAP_DATA?.name || event.target.value;
+    setMapNameEditing(false);
+  }
+});
+
+document.getElementById("map-name-input").addEventListener("blur", () => {
+  setMapNameEditing(false);
+});
+
+function layerControlIcon(name) {
+  const icons = {
+    up: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M6 11l6-6 6 6"/></svg>',
+    down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5"/><path d="M6 13l6 6 6-6"/></svg>',
+    remove: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  };
+  return icons[name] || "";
+}
+
 function renderActiveLayers() {
   const container = document.getElementById("active-layers");
   const layers = [...MAP_DATA.map_layers].sort((a, b) => b.order - a.order);
   const readOnly = MAP_DATA.my_permission === "view";
 
   if (!layers.length) {
-    container.innerHTML = `<p class="muted">No layers added yet.</p>`;
+    container.innerHTML = `<div class="builder-empty">No layers added yet.</div>`;
     return;
   }
 
   container.innerHTML = layers.map((ml) => `
-    <div class="layer-row" data-map-layer-id="${ml.id}">
-      <input type="checkbox" data-toggle-visible ${ml.visible ? "checked" : ""} ${readOnly ? "disabled" : ""}>
-      <span class="layer-name">${ml.layer_detail.name}</span>
-      <input type="range" min="0" max="1" step="0.05" value="${ml.opacity}" data-opacity ${readOnly ? "disabled" : ""}>
-      ${!readOnly ? `
-        <button class="btn btn-sm" data-move="up" title="Bring forward">↑</button>
-        <button class="btn btn-sm" data-move="down" title="Send back">↓</button>
-        <button class="btn btn-sm btn-danger" data-remove title="Remove from map">✕</button>
-      ` : ""}
+    <div class="builder-layer-card" data-map-layer-id="${ml.id}">
+      <div class="builder-layer-top">
+        <label class="builder-layer-check">
+          <input type="checkbox" data-toggle-visible ${ml.visible ? "checked" : ""} ${readOnly ? "disabled" : ""}>
+          <span class="layer-name">${ml.layer_detail.name}</span>
+        </label>
+        ${!readOnly ? `
+          <div class="builder-layer-actions">
+            <button type="button" class="layer-icon-btn" data-move="up" title="Bring forward" aria-label="Bring forward">${layerControlIcon("up")}</button>
+            <button type="button" class="layer-icon-btn" data-move="down" title="Send back" aria-label="Send back">${layerControlIcon("down")}</button>
+            <button type="button" class="layer-icon-btn is-danger" data-remove title="Remove from map" aria-label="Remove from map">${layerControlIcon("remove")}</button>
+          </div>
+        ` : ""}
+      </div>
+      <div class="builder-layer-opacity">
+        <span class="builder-opacity-label">Opacity</span>
+        <input type="range" min="0" max="1" step="0.05" value="${ml.opacity}" data-opacity ${readOnly ? "disabled" : ""}>
+      </div>
     </div>
   `).join("");
 
@@ -140,14 +208,14 @@ function renderAvailableLayers() {
   const remaining = ALL_LAYERS.filter((l) => !onMapIds.has(l.id));
 
   if (!remaining.length) {
-    container.innerHTML = `<p class="muted">All your layers are already on this map.</p>`;
+    container.innerHTML = `<div class="builder-empty">All your layers are already on this map.</div>`;
     return;
   }
 
   container.innerHTML = remaining.map((l) => `
-    <div class="layer-row">
+    <div class="builder-layer-card is-available">
       <span class="layer-name">${l.name}</span>
-      <button class="btn btn-sm" data-add-layer="${l.id}">Add</button>
+      <button type="button" class="btn btn-sm btn-primary" data-add-layer="${l.id}">Add</button>
     </div>
   `).join("");
 
@@ -413,7 +481,7 @@ function openShareModal() {
   document.getElementById("share-submit").disabled = true;
   SELECTED_SHARE_USER = null;
   renderShareList();
-  openModal("share-modal");
+  Auth.openModal("share-modal");
 }
 
 function renderShareList() {

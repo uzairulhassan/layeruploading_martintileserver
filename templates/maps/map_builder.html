@@ -12,12 +12,18 @@
 
   <div id="builder-panel" class="map-builder">
     <aside class="map-sidebar">
-      <div class="form-group">
-        <label for="map-name-input">Map name</label>
-        <input type="text" id="map-name-input">
+      <div class="builder-block">
+        <label class="builder-label" for="map-name-input">Map name</label>
+        <div class="name-edit-row">
+          <input type="text" id="map-name-input" class="name-edit-input" readonly>
+          <button type="button" class="name-edit-btn" id="edit-map-name-btn" title="Edit map name" aria-label="Edit map name">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M8 16l9.2-9.2a1.8 1.8 0 0 0-2.5-2.5L5.5 13.5 4 20l6.5-1.5z"/></svg>
+          </button>
+        </div>
       </div>
-      <div class="form-group">
-        <label for="basemap-select">Basemap</label>
+
+      <div class="builder-block">
+        <label class="builder-label" for="basemap-select">Basemap</label>
         <select id="basemap-select">
           <option value="mapbox://styles/mapbox/streets-v12">Streets</option>
           <option value="mapbox://styles/mapbox/light-v11">Light</option>
@@ -26,46 +32,63 @@
           <option value="mapbox://styles/mapbox/outdoors-v12">Outdoors</option>
         </select>
       </div>
-      <div class="btn-row">
+
+      <div class="btn-row builder-actions">
         <button type="button" class="btn btn-primary" id="save-map-btn">Save map</button>
         <button type="button" class="btn" id="share-map-btn">Share</button>
       </div>
-      <p class="muted permission-note" id="permission-note"></p>
 
-      <h3>On this map</h3>
-      <div id="active-layers"></div>
+      <div class="access-badge" id="access-badge" role="status">
+        <span class="access-badge-label">Your access</span>
+        <span class="access-badge-value" id="permission-value"></span>
+      </div>
 
-      <h3>Your layers</h3>
-      <div id="available-layers"></div>
+      <section class="builder-section">
+        <div class="builder-section-head">
+          <h3>On this map</h3>
+        </div>
+        <div id="active-layers" class="builder-layer-list"></div>
+      </section>
+
+      <section class="builder-section" id="available-layers-section">
+        <div class="builder-section-head">
+          <h3>Your layers</h3>
+        </div>
+        <div id="available-layers" class="builder-layer-list"></div>
+      </section>
     </aside>
     <div id="map-canvas"></div>
   </div>
 </div>
 
 <div id="share-modal" class="modal-backdrop hidden">
-  <div class="modal" role="dialog" aria-labelledby="builder-share-title">
+  <div class="modal modal-share" role="dialog" aria-labelledby="builder-share-title">
     <div class="modal-header">
       <h2 id="builder-share-title">Share map</h2>
       <p class="modal-sub">Invite teammates to view or edit this map.</p>
     </div>
     <div class="modal-body">
-      <div class="form-group">
-        <label for="share-search">Find user (username or email)</label>
-        <input type="text" id="share-search">
-        <div id="share-results" class="share-results muted"></div>
+      <div class="share-invite">
+        <div class="form-group">
+          <label for="share-search">Find user</label>
+          <input type="text" id="share-search" placeholder="Username or email">
+          <div id="share-results" class="share-results"></div>
+        </div>
+        <div class="form-group">
+          <label for="share-permission">Permission</label>
+          <select id="share-permission">
+            <option value="view">View only</option>
+            <option value="edit">Can edit layers &amp; layout</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
       </div>
-      <div class="form-group">
-        <label for="share-permission">Permission</label>
-        <select id="share-permission">
-          <option value="view">View only</option>
-          <option value="edit">Can edit layers &amp; layout</option>
-        </select>
+      <div class="share-list-block">
+        <p class="share-heading">Shared with</p>
+        <ul id="share-list" class="share-list"></ul>
       </div>
-      <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
-      <p class="share-heading">Currently shared with</p>
-      <ul id="share-list" class="share-list muted"></ul>
       <div class="modal-actions">
-        <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+        <button type="button" class="btn" data-close-modal="share-modal">Done</button>
       </div>
     </div>
   </div>
