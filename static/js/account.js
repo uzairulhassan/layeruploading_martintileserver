@@ -253,7 +253,7 @@
         throw new Error(
           body.avatar
             ? (Array.isArray(body.avatar) ? body.avatar[0] : body.avatar)
-            : (body.detail || "Upload failed."),
+            : (body.detail || body.error || "Upload failed."),
         );
       }
       applyProfile(body);
