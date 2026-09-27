@@ -6,7 +6,6 @@
   const avatarEl = document.getElementById("account-avatar");
   const avatarInput = document.getElementById("avatar-input");
   const avatarRemoveBtn = document.getElementById("avatar-remove-btn");
-  const avatarStatus = document.getElementById("avatar-status");
   const form = document.getElementById("account-form");
   const usernameInput = document.getElementById("account-username");
   const emailInput = document.getElementById("account-email");
@@ -14,7 +13,6 @@
   const emailStatus = document.getElementById("account-email-status");
   const usernameCooldown = document.getElementById("username-cooldown");
   const emailCooldown = document.getElementById("email-cooldown");
-  const formStatus = document.getElementById("account-form-status");
   const saveBtn = document.getElementById("account-save-btn");
   const typeBadge = document.getElementById("account-type-badge");
   const createdEl = document.getElementById("account-created");
@@ -39,10 +37,10 @@
     },
   );
 
-  function setHint(el, text, state) {
+  function clearHint(el) {
     if (!el) return;
-    el.textContent = text || "";
-    el.className = "field-hint" + (state ? ` is-${state}` : "");
+    el.textContent = "";
+    el.className = "field-hint";
   }
 
   function formatDate(iso) {
@@ -99,7 +97,7 @@
     if (!canUser) {
       usernameCooldown.hidden = false;
       usernameCooldown.textContent = formatCooldown(profile.next_username_change_at);
-      if (!editingUsername) setHint(usernameStatus, "", "");
+      if (!editingUsername) clearHint(usernameStatus);
     } else {
       usernameCooldown.hidden = true;
       usernameCooldown.textContent = "";
@@ -108,14 +106,14 @@
     if (!canEmail) {
       emailCooldown.hidden = false;
       emailCooldown.textContent = formatCooldown(profile.next_email_change_at);
-      if (!editingEmail) setHint(emailStatus, "", "");
+      if (!editingEmail) clearHint(emailStatus);
     } else {
       emailCooldown.hidden = true;
       emailCooldown.textContent = "";
     }
 
-    if (!editingUsername) setHint(usernameStatus, "", "");
-    if (!editingEmail) setHint(emailStatus, "", "");
+    if (!editingUsername) clearHint(usernameStatus);
+    if (!editingEmail) clearHint(emailStatus);
   }
 
   function applyProfile(user) {
@@ -195,8 +193,7 @@
   function cancelEditUsername() {
     editingUsername = false;
     usernameInput.value = profile?.username || "";
-    setHint(usernameStatus, "", "");
-    setHint(formStatus, "", "");
+    clearHint(usernameStatus);
     syncIdentityControls();
     updateSaveState();
   }
@@ -213,8 +210,7 @@
   function cancelEditEmail() {
     editingEmail = false;
     emailInput.value = profile?.email || "";
-    setHint(emailStatus, "", "");
-    setHint(formStatus, "", "");
+    clearHint(emailStatus);
     syncIdentityControls();
     updateSaveState();
   }
@@ -223,7 +219,7 @@
     const response = await Auth.apiFetch("/api/auth/me/");
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      setHint(formStatus, body.detail || "Could not load profile.", "error");
+      Toast.error(Toast.fromApiBody(body, "Could not load profile."));
       return;
     }
     applyProfile(body);
@@ -236,11 +232,10 @@
     const name = (file.name || "").toLowerCase();
     const hasAllowedExt = name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
     if ((file.type && !allowedTypes.includes(file.type)) || (!file.type && !hasAllowedExt)) {
-      setHint(avatarStatus, "Use a JPG or PNG image.", "error");
+      Toast.error("Use a JPG or PNG image.");
       avatarInput.value = "";
       return;
     }
-    setHint(avatarStatus, "Uploading…", "pending");
     const data = new FormData();
     data.append("avatar", file);
     try {
@@ -250,33 +245,28 @@
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(
-          body.avatar
-            ? (Array.isArray(body.avatar) ? body.avatar[0] : body.avatar)
-            : (body.detail || body.error || "Upload failed."),
-        );
+        throw new Error(Toast.fromApiBody(body, "Upload failed."));
       }
       applyProfile(body);
-      setHint(avatarStatus, "Profile photo updated.", "ok");
+      Toast.success("Profile photo updated.");
     } catch (err) {
-      setHint(avatarStatus, err.message || "Upload failed.", "error");
+      Toast.error(err.message || "Upload failed.");
     } finally {
       avatarInput.value = "";
     }
   });
 
   avatarRemoveBtn?.addEventListener("click", async () => {
-    setHint(avatarStatus, "Removing…", "pending");
     try {
       const response = await Auth.apiFetch("/api/auth/me/avatar/", { method: "DELETE" });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(body.detail || "Could not remove photo.");
+        throw new Error(Toast.fromApiBody(body, "Could not remove photo."));
       }
       applyProfile(body);
-      setHint(avatarStatus, "Profile photo removed.", "ok");
+      Toast.success("Profile photo removed.");
     } catch (err) {
-      setHint(avatarStatus, err.message || "Could not remove photo.", "error");
+      Toast.error(err.message || "Could not remove photo.");
     }
   });
 
@@ -287,14 +277,8 @@
 
   emailInput.addEventListener("input", () => {
     if (!editingEmail) return;
-    setHint(emailStatus, "", "");
-    setHint(formStatus, "", "");
+    clearHint(emailStatus);
     updateSaveState();
-  });
-
-  usernameInput.addEventListener("input", () => {
-    if (!editingUsername) return;
-    setHint(formStatus, "", "");
   });
 
   form?.addEventListener("submit", async (event) => {
@@ -313,7 +297,6 @@
     if (!Object.keys(payload).length) return;
 
     saveBtn.disabled = true;
-    setHint(formStatus, "Saving…", "pending");
     try {
       const response = await Auth.apiFetch("/api/auth/me/", {
         method: "PATCH",
@@ -321,25 +304,19 @@
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(
-          body.username
-            ? (Array.isArray(body.username) ? body.username[0] : body.username)
-            : body.email
-              ? (Array.isArray(body.email) ? body.email[0] : body.email)
-              : (body.detail || "Could not save changes."),
-        );
+        throw new Error(Toast.fromApiBody(body, "Could not save changes."));
       }
       applyProfile(body);
-      setHint(formStatus, "Account updated.", "ok");
+      Toast.success("Account updated.");
     } catch (err) {
-      setHint(formStatus, err.message || "Could not save changes.", "error");
+      Toast.error(err.message || "Could not save changes.");
       updateSaveState();
     }
   });
 
   document.addEventListener("DOMContentLoaded", () => {
     loadProfile().catch(() => {
-      setHint(formStatus, "Could not load profile.", "error");
+      Toast.error("Could not load profile.");
     });
   });
 })();

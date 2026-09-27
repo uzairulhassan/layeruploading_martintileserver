@@ -32,6 +32,7 @@ async function loadMap() {
   const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/`);
   if (!res.ok) {
     document.getElementById("builder-panel").innerHTML = `<div class="builder-error"><p class="muted">Map not found or access denied.</p></div>`;
+    Toast.error(await Toast.fromResponse(res, "Map not found or access denied."));
     return;
   }
   MAP_DATA = await res.json();
@@ -196,10 +197,19 @@ function renderActiveLayers() {
 }
 
 async function loadAvailableLayers() {
-  const res = await Auth.apiFetch("/api/layers/?page_size=200");
-  const data = await res.json();
-  ALL_LAYERS = data.results || data;
-  renderAvailableLayers();
+  try {
+    const res = await Auth.apiFetch("/api/layers/?page_size=200");
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not load available layers."));
+    }
+    const data = await res.json();
+    ALL_LAYERS = data.results || data;
+    renderAvailableLayers();
+  } catch (err) {
+    Toast.error(err.message || "Could not load available layers.");
+    ALL_LAYERS = [];
+    renderAvailableLayers();
+  }
 }
 
 function renderAvailableLayers() {
@@ -230,19 +240,24 @@ async function addLayerToMap(layerId) {
     body: { layer: layerId },
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    alert(body.detail || "Could not add layer to map.");
+    Toast.error(await Toast.fromResponse(res, "Could not add layer to map."));
     return;
   }
   await refreshAfterLayerChange();
+  Toast.success("Layer added to map.");
   // Fit immediately, then once more after the style/sources settle.
   fitMapToLayers({ preferLayerId: layerId });
   window.setTimeout(() => fitMapToLayers({ preferLayerId: layerId, animate: true }), 400);
 }
 
 async function removeMapLayer(mapLayerId) {
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "DELETE" });
+  const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "DELETE" });
+  if (!res.ok && res.status !== 204) {
+    Toast.error(await Toast.fromResponse(res, "Could not remove layer."));
+    return;
+  }
   await refreshAfterLayerChange();
+  Toast.success("Layer removed from map.");
 }
 
 function shouldAutoFitOnLoad() {
@@ -298,8 +313,15 @@ function fitMapToLayers({ preferLayerId = null, animate = true } = {}) {
 
 
 async function updateMapLayer(mapLayerId, payload) {
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "PATCH", body: payload });
-  await refreshAfterLayerChange();
+  try {
+    const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "PATCH", body: payload });
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not update layer."));
+    }
+    await refreshAfterLayerChange();
+  } catch (err) {
+    Toast.error(err.message || "Could not update layer.");
+  }
 }
 
 async function moveLayer(mapLayerId, direction) {
@@ -309,11 +331,18 @@ async function moveLayer(mapLayerId, direction) {
   if (swapWith < 0 || swapWith >= sorted.length) return;
   [sorted[idx], sorted[swapWith]] = [sorted[swapWith], sorted[idx]];
 
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/reorder/`, {
-    method: "POST",
-    body: { order: sorted.map((ml) => ml.id) },
-  });
-  await refreshAfterLayerChange();
+  try {
+    const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/reorder/`, {
+      method: "POST",
+      body: { order: sorted.map((ml) => ml.id) },
+    });
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not reorder layers."));
+    }
+    await refreshAfterLayerChange();
+  } catch (err) {
+    Toast.error(err.message || "Could not reorder layers.");
+  }
 }
 
 async function refreshAfterLayerChange() {
@@ -458,20 +487,24 @@ function addMapboxLayer(mapLayer) {
 
 async function saveMapMeta() {
   const center = GL_MAP.getCenter();
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/`, {
-    method: "PATCH",
-    body: {
-      name: document.getElementById("map-name-input").value,
-      basemap_style: document.getElementById("basemap-select").value,
-      center_lng: center.lng,
-      center_lat: center.lat,
-      zoom: GL_MAP.getZoom(),
-    },
-  });
-  const btn = document.getElementById("save-map-btn");
-  const original = btn.textContent;
-  btn.textContent = "Saved!";
-  setTimeout(() => { btn.textContent = original; }, 1200);
+  try {
+    const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/`, {
+      method: "PATCH",
+      body: {
+        name: document.getElementById("map-name-input").value,
+        basemap_style: document.getElementById("basemap-select").value,
+        center_lng: center.lng,
+        center_lat: center.lat,
+        zoom: GL_MAP.getZoom(),
+      },
+    });
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not save map."));
+    }
+    Toast.success("Map saved.");
+  } catch (err) {
+    Toast.error(err.message || "Could not save map.");
+  }
 }
 
 // ---- Share modal ----
@@ -497,9 +530,20 @@ function renderShareList() {
   })).join("");
   list.querySelectorAll("[data-remove-share]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      await Auth.apiFetch(`/api/maps/${MAP_ID}/unshare/`, { method: "POST", body: { user_id: btn.dataset.removeShare } });
-      await refreshAfterLayerChange();
-      renderShareList();
+      try {
+        const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/unshare/`, {
+          method: "POST",
+          body: { user_id: btn.dataset.removeShare },
+        });
+        if (!res.ok) {
+          throw new Error(await Toast.fromResponse(res, "Could not remove access."));
+        }
+        await refreshAfterLayerChange();
+        renderShareList();
+        Toast.success("Access removed.");
+      } catch (err) {
+        Toast.error(err.message || "Could not remove access.");
+      }
     });
   });
 }
@@ -536,15 +580,23 @@ document.getElementById("share-search").addEventListener("input", (event) => {
 document.getElementById("share-submit").addEventListener("click", async () => {
   if (!SELECTED_SHARE_USER) return;
   const permission = document.getElementById("share-permission").value;
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/share/`, {
-    method: "POST",
-    body: { shared_with: SELECTED_SHARE_USER.id, permission },
-  });
-  await refreshAfterLayerChange();
-  renderShareList();
-  document.getElementById("share-submit").disabled = true;
-  SELECTED_SHARE_USER = null;
-  document.getElementById("share-search").value = "";
+  try {
+    const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/share/`, {
+      method: "POST",
+      body: { shared_with: SELECTED_SHARE_USER.id, permission },
+    });
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not share map."));
+    }
+    await refreshAfterLayerChange();
+    renderShareList();
+    document.getElementById("share-submit").disabled = true;
+    SELECTED_SHARE_USER = null;
+    document.getElementById("share-search").value = "";
+    Toast.success("Map shared.");
+  } catch (err) {
+    Toast.error(err.message || "Could not share map.");
+  }
 });
 
 document.addEventListener("DOMContentLoaded", init);

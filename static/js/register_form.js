@@ -8,7 +8,6 @@
 
   const endpoint = form.dataset.endpoint;
   const failMessage = form.dataset.failMessage || "Registration failed.";
-  const errorBox = document.getElementById("register-error");
   const submitBtn = document.getElementById("register-submit");
   const usernameInput = document.getElementById("username");
   const statusEl = document.getElementById("username-status");
@@ -36,7 +35,6 @@
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    errorBox.classList.add("hidden");
 
     const username = usernameInput.value.trim();
     const email = document.getElementById("email").value.trim();
@@ -44,18 +42,15 @@
     const passwordConfirm = confirmInput.value;
 
     if (!usernameCheck.isAvailable()) {
-      errorBox.textContent = "Please choose an available username.";
-      errorBox.classList.remove("hidden");
+      Toast.error("Please choose an available username.");
       return;
     }
     if (!passwordCheck.isValid()) {
-      errorBox.textContent = "Password does not meet the requirements.";
-      errorBox.classList.remove("hidden");
+      Toast.error("Password does not meet the requirements.");
       return;
     }
     if (!passwordCheck.matchesConfirm()) {
-      errorBox.textContent = "Passwords do not match.";
-      errorBox.classList.remove("hidden");
+      Toast.error("Passwords do not match.");
       return;
     }
 
@@ -67,10 +62,10 @@
         password,
         password_confirm: passwordConfirm,
       });
+      Toast.flash("Account created. Please sign in.", "success");
       window.location.href = "/login/";
     } catch (err) {
-      errorBox.textContent = err.message || failMessage;
-      errorBox.classList.remove("hidden");
+      Toast.error(err.message || failMessage);
       refreshSubmit();
     }
   });

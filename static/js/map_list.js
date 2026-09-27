@@ -7,10 +7,19 @@ function findMap(id) {
 }
 
 async function loadMaps() {
-  const res = await Auth.apiFetch("/api/maps/");
-  const data = await res.json();
-  CURRENT_MAPS = data.results || data;
-  renderMaps();
+  try {
+    const res = await Auth.apiFetch("/api/maps/");
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not load maps."));
+    }
+    const data = await res.json();
+    CURRENT_MAPS = data.results || data;
+    renderMaps();
+  } catch (err) {
+    Toast.error(err.message || "Could not load maps.");
+    CURRENT_MAPS = [];
+    renderMaps();
+  }
 }
 
 function filteredMaps() {
@@ -132,10 +141,14 @@ document.getElementById("delete-confirm").addEventListener("click", async () => 
   btn.disabled = true;
   try {
     const res = await Auth.apiFetch(`/api/maps/${id}/`, { method: "DELETE" });
-    if (res.ok || res.status === 204) {
-      Auth.closeModal("delete-modal");
-      await loadMaps();
+    if (!res.ok && res.status !== 204) {
+      throw new Error(await Toast.fromResponse(res, "Could not delete map."));
     }
+    Auth.closeModal("delete-modal");
+    await loadMaps();
+    Toast.success("Map deleted.");
+  } catch (err) {
+    Toast.error(err.message || "Could not delete map.");
   } finally {
     btn.disabled = false;
   }
@@ -165,12 +178,20 @@ function renderShareList(map) {
   list.querySelectorAll("[data-remove-share]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const mapId = document.getElementById("share-map-id").value;
-      await Auth.apiFetch(`/api/maps/${mapId}/unshare/`, {
-        method: "POST",
-        body: { user_id: btn.dataset.removeShare },
-      });
-      await loadMaps();
-      renderShareList(findMap(mapId));
+      try {
+        const res = await Auth.apiFetch(`/api/maps/${mapId}/unshare/`, {
+          method: "POST",
+          body: { user_id: btn.dataset.removeShare },
+        });
+        if (!res.ok) {
+          throw new Error(await Toast.fromResponse(res, "Could not remove access."));
+        }
+        await loadMaps();
+        renderShareList(findMap(mapId));
+        Toast.success("Access removed.");
+      } catch (err) {
+        Toast.error(err.message || "Could not remove access.");
+      }
     });
   });
 }
@@ -208,21 +229,26 @@ document.getElementById("share-submit").addEventListener("click", async () => {
   if (!SELECTED_SHARE_USER) return;
   const mapId = document.getElementById("share-map-id").value;
   const permission = document.getElementById("share-permission").value;
-  await Auth.apiFetch(`/api/maps/${mapId}/share/`, {
-    method: "POST",
-    body: { shared_with: SELECTED_SHARE_USER.id, permission },
-  });
-  await loadMaps();
-  renderShareList(findMap(mapId));
-  document.getElementById("share-submit").disabled = true;
-  SELECTED_SHARE_USER = null;
-  document.getElementById("share-search").value = "";
+  try {
+    const res = await Auth.apiFetch(`/api/maps/${mapId}/share/`, {
+      method: "POST",
+      body: { shared_with: SELECTED_SHARE_USER.id, permission },
+    });
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not share map."));
+    }
+    await loadMaps();
+    renderShareList(findMap(mapId));
+    document.getElementById("share-submit").disabled = true;
+    SELECTED_SHARE_USER = null;
+    document.getElementById("share-search").value = "";
+    Toast.success("Map shared.");
+  } catch (err) {
+    Toast.error(err.message || "Could not share map.");
+  }
 });
 
 function openCreateMapModal() {
-  const error = document.getElementById("create-map-error");
-  error.classList.add("hidden");
-  error.textContent = "";
   document.getElementById("create-map-form").reset();
   Auth.openModal("create-map-modal");
   setTimeout(() => document.getElementById("new-map-name").focus(), 50);
@@ -233,13 +259,9 @@ document.getElementById("open-create-map-modal").addEventListener("click", openC
 document.getElementById("create-map-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const name = document.getElementById("new-map-name").value.trim();
-  const error = document.getElementById("create-map-error");
   const submitBtn = document.getElementById("create-map-submit");
-  error.classList.add("hidden");
-  error.textContent = "";
   if (!name) {
-    error.textContent = "Enter a map name.";
-    error.classList.remove("hidden");
+    Toast.error("Enter a map name.");
     return;
   }
   submitBtn.disabled = true;
@@ -255,17 +277,13 @@ document.getElementById("create-map-form").addEventListener("submit", async (eve
       },
     });
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      error.textContent = data.detail || data.name?.[0] || "Could not create map.";
-      error.classList.remove("hidden");
-      return;
+      throw new Error(await Toast.fromResponse(res, "Could not create map."));
     }
     const data = await res.json();
+    Toast.flash("Map created.", "success");
     window.location.href = `/maps/${data.id}/`;
   } catch (err) {
-    console.error(err);
-    error.textContent = "Could not create map.";
-    error.classList.remove("hidden");
+    Toast.error(err.message || "Could not create map.");
   } finally {
     submitBtn.disabled = false;
   }

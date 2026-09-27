@@ -90,6 +90,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     ["owned-layers-copy", "shared-layers-copy", "owned-maps-copy", "shared-maps-copy"].forEach((id) => {
       document.getElementById(id).textContent = "Could not load summary.";
     });
+    Toast.error("Could not load dashboard summary.");
   }
 });
 </script>

@@ -33,8 +33,8 @@ const Auth = (() => {
     return match ? decodeURIComponent(match[2]) : null;
   }
 
-  function formatApiErrors(body) {
-    if (!body || typeof body !== "object") return "Request failed.";
+  function formatApiErrors(body, fallback = "Request failed.") {
+    if (!body || typeof body !== "object") return fallback;
     if (body.detail) {
       return typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
     }
@@ -44,7 +44,7 @@ const Auth = (() => {
       const msg = Array.isArray(value) ? value.join(" ") : String(value);
       parts.push(key === "non_field_errors" ? msg : `${key}: ${msg}`);
     }
-    return parts.join(" ") || "Request failed.";
+    return parts.join(" ") || fallback;
   }
 
   async function login(username, password) {
@@ -55,7 +55,7 @@ const Auth = (() => {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(body.detail || "Invalid username/email or password.");
+      throw new Error(formatApiErrors(body, "Invalid username/email or password."));
     }
     const data = await response.json();
     setTokens({ access: data.access, refresh: data.refresh });
@@ -444,6 +444,7 @@ const Auth = (() => {
     bindPasswordCheck,
     apiFetch,
     escapeHtml,
+    formatApiErrors,
     openModal,
     closeModal,
     bindModalClosers,
