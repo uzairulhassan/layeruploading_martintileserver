@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}GeoLayers{% endblock %}</title>
+  <title>{% block title %}GeoTrak Layers{% endblock %}</title>
+  <link rel="icon" href="{% static 'images/geotrak-browser-icon.png' %}?v=2" type="image/png" sizes="32x32">
   <script>
     (function () {
       try {
@@ -21,7 +22,7 @@
 <body>
   {% if user.is_authenticated %}
   <header class="topbar">
-    <a class="brand" href="{% url 'core:dashboard' %}">GeoLayers</a>
+    <a class="brand" href="{% url 'core:dashboard' %}">GeoTrak Layers</a>
 
     <nav class="topbar-nav" aria-label="Main">
       <a href="{% url 'core:dashboard' %}" {% if request.resolver_match.url_name == 'dashboard' %}class="is-active"{% endif %}>Dashboard</a>
