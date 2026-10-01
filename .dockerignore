@@ -20,5 +20,5 @@ _tmp_*
 .vscode
 .idea
 .env
+.env.prod
 .env.*
-!.env.example

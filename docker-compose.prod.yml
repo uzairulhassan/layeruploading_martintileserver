@@ -1,7 +1,7 @@
 # GeoLayers production app container.
 #
-# Requires the shared stack ../geo-infra (PostGIS, Martin, Nginx) to be running.
-#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+# Requires the shared stack ../geo_infra (PostGIS, Martin, Nginx) to be running.
+#   docker compose -f docker-compose.prod.yml up -d --build
 # Public URL: http://<host>:8081 (served by the shared Nginx; this container publishes no ports).
 name: geolayers
 

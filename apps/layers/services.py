@@ -2,9 +2,9 @@
 
 Uploaded shapefiles (as a .zip containing .shp/.shx/.dbf/.prj) are imported
 with ogr2ogr into a brand-new, uniquely-named table in the ``LAYER_TABLE_SCHEMA``
-schema (default ``layers_data``). Martin is configured to auto-publish tables
-from that schema as vector tiles, so no further wiring is required once the
-table exists and Martin's catalog reload has picked it up.
+schema (default ``layers_data``). Martin serves every such table through the
+shared ``layers_data.geolayers_tile`` function source (``?layer=<table>``), so
+new uploads are tileable immediately with no catalog reload or restart.
 """
 import subprocess
 import tempfile

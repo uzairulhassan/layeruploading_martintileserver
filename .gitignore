@@ -22,8 +22,9 @@ staticfiles/
 
 # Env (never commit real secrets)
 .env
-.env.*
-!.env.example
+.env.prod
+.env.local
+.env.*.local
 
 # IDE
 .vscode/

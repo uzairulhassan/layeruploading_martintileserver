@@ -1,10 +1,11 @@
 # GeoLayers app container (local development; bind-mounts the source).
 #
-# PostgreSQL/PostGIS, Martin and Nginx live in the shared stack ../geo-infra.
-# Start it first (it creates the external `geo_shared` network):
-#   cd ../geo-infra && docker compose up -d
-# The app is served through Nginx on :8081 (GEOLAYERS_HTTP_PORT). Nginx resolves
-# this container by its network alias `geolayers_web`.
+# PostgreSQL/PostGIS, Martin and Nginx live in the shared stack ../geo_infra.
+# Start it first (creates the external `geo_shared` network):
+#   cd ../geo_infra && docker compose up -d
+#
+# Public URL: http://localhost:8081 (via shared Nginx).
+# Production: use docker-compose.prod.yml instead.
 services:
   web:
     build: .

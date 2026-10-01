@@ -131,6 +131,7 @@ LOGOUT_REDIRECT_URL = "core:login"
 if not DEBUG:
     SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=False)
     CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=False)
+    SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
     SECURE_REFERRER_POLICY = "same-origin"

@@ -25,7 +25,7 @@ RUN mkdir -p /app/staticfiles /app/media \
     && chmod +x /app/entrypoint.sh \
     && sed -i 's/\r$//' /app/entrypoint.sh
 
-# Container listens on 8000; host maps 8001:8000 in docker-compose.prod.yml
+# Container listens on 8000 internally; public access is via shared Nginx on :8081
 EXPOSE 8000
 
 ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]
