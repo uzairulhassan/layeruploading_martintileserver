@@ -230,33 +230,6 @@ function setShareTab(tab) {
   }
 }
 
-function fillXyzShareFields(layer) {
-  const xyzUrl = layer.xyz_url || `${layer.tile_url}/{z}/{x}/{y}`;
-  const sourceLayer = layer.source_layer || "";
-  const geometry = layer.suggested_geometry || "line";
-
-  const urlEl = document.getElementById("xyz-url");
-  const sourceEl = document.getElementById("xyz-source-layer");
-  const geomEl = document.getElementById("xyz-geometry");
-
-  urlEl.textContent = "";
-  sourceEl.textContent = "";
-  geomEl.textContent = "";
-
-  // Reveal text with a short staggered “live” reveal.
-  window.requestAnimationFrame(() => {
-    urlEl.textContent = xyzUrl;
-    urlEl.classList.add("is-revealed");
-    sourceEl.textContent = sourceLayer;
-    sourceEl.classList.add("is-revealed");
-    geomEl.textContent = geometry;
-    geomEl.classList.add("is-revealed");
-  });
-
-  urlEl.dataset.copyText = xyzUrl;
-  sourceEl.dataset.copyText = sourceLayer;
-}
-
 function openShareModal(layer) {
   CURRENT_SHARE_LAYER = layer;
   document.getElementById("share-layer-id").value = layer.id;
@@ -268,21 +241,118 @@ function openShareModal(layer) {
   const isOwner = layer.my_permission === "owner";
   document.getElementById("share-people-owner").classList.toggle("hidden", !isOwner);
   document.getElementById("share-people-viewer").classList.toggle("hidden", isOwner);
+  document.getElementById("xyz-owner-only").classList.toggle("hidden", !isOwner);
+  document.getElementById("xyz-viewer-note").classList.toggle("hidden", isOwner);
 
-  document.querySelectorAll(".xyz-copy-btn.is-copied").forEach((btn) => {
-    btn.classList.remove("is-copied");
-  });
   document.getElementById("xyz-copy-status").textContent = "";
   document.getElementById("xyz-copy-status").classList.remove("is-visible");
-  document.getElementById("xyz-url").classList.remove("is-revealed");
-  document.getElementById("xyz-source-layer").classList.remove("is-revealed");
-  document.getElementById("xyz-geometry").classList.remove("is-revealed");
+  document.getElementById("xyz-create-error").classList.add("hidden");
 
-  fillXyzShareFields(layer);
+  const expiryInput = document.getElementById("xyz-expiry");
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  expiryInput.min = tomorrow;
+  expiryInput.value = "";
+
   if (isOwner) renderShareList(layer);
+  if (isOwner) loadShareLinks(layer.id);
   setShareTab("people");
   openModal("share-modal");
 }
+
+// ---- XYZ share links (expiring, revocable) ----
+async function loadShareLinks(layerId) {
+  const list = document.getElementById("xyz-links-list");
+  list.innerHTML = `<li class="muted">Loading…</li>`;
+  const res = await Auth.apiFetch(`/api/layers/${layerId}/share-links/`);
+  if (!res.ok) {
+    list.innerHTML = `<li class="muted">Could not load share links.</li>`;
+    return;
+  }
+  const links = await res.json();
+  renderShareLinks(layerId, links);
+}
+
+function formatExpiry(isoString) {
+  const date = new Date(isoString);
+  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function formatUsage(link) {
+  if (!link.total_requests) return "never used";
+  const last = link.last_used_at ? `, last used ${formatExpiry(link.last_used_at)}` : "";
+  return `${link.total_requests.toLocaleString()} tile requests (${link.requests_last_30_days.toLocaleString()} in 30 days)${last}`;
+}
+
+function renderShareLinks(layerId, links) {
+  const list = document.getElementById("xyz-links-list");
+  if (!links.length) {
+    list.innerHTML = `<li class="muted">No active share links yet.</li>`;
+    return;
+  }
+  list.innerHTML = links.map((link) => `
+    <li data-link-id="${link.id}">
+      <div style="flex:1; min-width:0;">
+        <code class="xyz-chip" style="display:block; margin-bottom:0.3rem;">${link.xyz_url}</code>
+        <span class="muted" style="font-size:0.78rem;">
+          ${link.is_expired ? "Expired" : "Expires"} ${formatExpiry(link.expires_at)}
+          ${link.is_blocked ? " &middot; blocked by admin" : ""}
+          &middot; ${formatUsage(link)}
+        </span>
+      </div>
+      <div style="display:flex; gap:0.4rem; flex:0 0 auto;">
+        <button type="button" class="btn btn-sm" data-copy-link="${link.xyz_url}">Copy</button>
+        <button type="button" class="btn btn-sm btn-danger" data-revoke-link="${link.id}">Revoke</button>
+      </div>
+    </li>
+  `).join("");
+
+  list.querySelectorAll("[data-copy-link]").forEach((btn) => {
+    btn.addEventListener("click", () => copyToClipboardWithFeedback(btn.dataset.copyLink, btn, "Link copied."));
+  });
+  list.querySelectorAll("[data-revoke-link]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Revoke this share link? Anyone using it will immediately lose access.")) return;
+      await Auth.apiFetch(`/api/layers/${layerId}/share-links/${btn.dataset.revokeLink}/`, { method: "DELETE" });
+      await loadShareLinks(layerId);
+    });
+  });
+}
+
+document.getElementById("xyz-create-btn").addEventListener("click", async () => {
+  const layer = CURRENT_SHARE_LAYER;
+  if (!layer) return;
+  const errorBox = document.getElementById("xyz-create-error");
+  errorBox.classList.add("hidden");
+
+  const expiryValue = document.getElementById("xyz-expiry").value;
+  if (!expiryValue) {
+    errorBox.textContent = "Pick an expiry date.";
+    errorBox.classList.remove("hidden");
+    return;
+  }
+  // End-of-day in the browser's local time, sent as an absolute instant.
+  const expiresAt = new Date(`${expiryValue}T23:59:59`);
+
+  const btn = document.getElementById("xyz-create-btn");
+  btn.disabled = true;
+  try {
+    const res = await Auth.apiFetch(`/api/layers/${layer.id}/share-links/`, {
+      method: "POST",
+      body: { expires_at: expiresAt.toISOString() },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.expires_at?.[0] || body.detail || "Could not create the link.");
+    }
+    document.getElementById("xyz-expiry").value = "";
+    await loadShareLinks(layer.id);
+  } catch (err) {
+    errorBox.textContent = err.message;
+    errorBox.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 function renderShareList(layer) {
   const list = document.getElementById("share-list");
@@ -354,25 +424,15 @@ document.querySelectorAll("[data-share-tab]").forEach((btn) => {
   btn.addEventListener("click", () => setShareTab(btn.dataset.shareTab));
 });
 
-async function copyShareValue(kind, button) {
-  const layer = CURRENT_SHARE_LAYER;
-  if (!layer) return;
-
-  const text =
-    kind === "source"
-      ? (layer.source_layer || document.getElementById("xyz-source-layer").dataset.copyText || "")
-      : (layer.xyz_url || document.getElementById("xyz-url").dataset.copyText || "");
-
+async function copyToClipboardWithFeedback(text, button, successText) {
   const status = document.getElementById("xyz-copy-status");
   clearTimeout(SHARE_COPY_RESET);
 
   try {
     await copyTextToClipboard(text);
-    document.querySelectorAll(".xyz-copy-btn.is-copied").forEach((btn) => {
-      btn.classList.remove("is-copied");
-    });
+    document.querySelectorAll("#xyz-links-list .is-copied").forEach((btn) => btn.classList.remove("is-copied"));
     button.classList.add("is-copied");
-    status.textContent = kind === "source" ? "Source layer copied." : "XYZ link copied.";
+    status.textContent = successText;
     status.classList.add("is-visible");
     SHARE_COPY_RESET = window.setTimeout(() => {
       button.classList.remove("is-copied");
@@ -413,10 +473,6 @@ function copyTextToClipboard(text) {
     else reject(new Error("execCommand copy failed"));
   });
 }
-
-document.querySelectorAll("#share-panel-xyz [data-copy-value]").forEach((btn) => {
-  btn.addEventListener("click", () => copyShareValue(btn.dataset.copyValue, btn));
-});
 
 document.addEventListener("DOMContentLoaded", () => {
   bindColorPair("style-fill-color", "style-fill-color-picker", "#0F2D53");

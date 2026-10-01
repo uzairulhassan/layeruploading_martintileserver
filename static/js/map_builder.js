@@ -11,12 +11,9 @@ document.querySelectorAll("[data-close-modal]").forEach((btn) => {
   btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
 });
 
-function tableNameFromTileUrl(tileUrl) {
-  return (tileUrl || "").split("/").filter(Boolean).pop();
-}
-
 function sourceLayerName(layer) {
-  return layer.source_layer || tableNameFromTileUrl(layer.tile_url);
+  // MVT layer name inside each tile = PostGIS table name (set by layers_data.geolayers_tile)
+  return layer.source_layer;
 }
 
 function hasUsableBounds(bounds) {
@@ -307,7 +304,7 @@ function renderMapLayers() {
 
 function addMapboxLayer(mapLayer) {
   const layer = mapLayer.layer_detail;
-  if (!layer?.tile_url) return;
+  if (!layer?.xyz_url) return;
 
   const sourceId = `src-${layer.id}`;
   const tableName = sourceLayerName(layer);
@@ -319,7 +316,8 @@ function addMapboxLayer(mapLayer) {
 
   GL_MAP.addSource(sourceId, {
     type: "vector",
-    tiles: [`${layer.tile_url.replace(/\/$/, "")}/{z}/{x}/{y}`],
+    // xyz_url = <tiles>/geolayers_tile/{z}/{x}/{y}?layer=<table> (one Martin function source for all layers)
+    tiles: [layer.xyz_url],
     minzoom: 0,
     maxzoom: 22,
   });
