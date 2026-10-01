@@ -1,7 +1,9 @@
+import secrets
 import uuid
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class LayerInfo(models.Model):
@@ -76,3 +78,60 @@ class LayerShare(models.Model):
 
     def __str__(self):
         return f"{self.layer.name} -> {self.shared_with} ({self.permission})"
+
+
+def _generate_share_token() -> str:
+    return secrets.token_urlsafe(24)
+
+
+class LayerShareLink(models.Model):
+    """A revocable, expiring public link that serves a layer's XYZ vector tiles.
+
+    Unlike the owner/shared-user model above, anyone with the link's token can
+    fetch tiles through ``serve_shared_tile`` (no account required) until it
+    expires or is blocked — so tiles are proxied through that view rather than
+    handed out as a raw Martin URL, which could never be revoked.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    layer = models.ForeignKey(LayerInfo, on_delete=models.CASCADE, related_name="share_links")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="layer_share_links"
+    )
+    token = models.CharField(max_length=64, unique=True, editable=False, default=_generate_share_token)
+    expires_at = models.DateTimeField()
+    is_blocked = models.BooleanField(default=False, help_text="Admins can block a link without deleting it.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.layer.name} link ({self.token[:8]}…)"
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at
+
+    @property
+    def is_active(self) -> bool:
+        return not self.is_blocked and not self.is_expired
+
+
+class LayerShareLinkUsage(models.Model):
+    """Per-day tile request counter for one share link (one upsert per tile)."""
+
+    link = models.ForeignKey(LayerShareLink, on_delete=models.CASCADE, related_name="usage")
+    date = models.DateField()
+    request_count = models.PositiveBigIntegerField(default=0)
+    last_request_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-date"]
+        constraints = [
+            models.UniqueConstraint(fields=["link", "date"], name="layer_share_link_usage_unique"),
+        ]
+
+    def __str__(self):
+        return f"{self.link} {self.date}: {self.request_count}"

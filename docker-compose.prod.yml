@@ -1,71 +1,27 @@
+# GeoLayers production app container.
+#
+# Requires the shared stack ../geo-infra (PostGIS, Martin, Nginx) to be running.
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+# Public URL: http://<host>:8081 (served by the shared Nginx; this container publishes no ports).
 name: geolayers
 
 services:
-  db:
-    image: postgis/postgis:16-3.4
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-gis_app}
-      POSTGRES_USER: ${POSTGRES_USER:-gis_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5435:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    networks:
-      - geolayers_net
-
   web:
     build: .
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgis://${POSTGRES_USER:-gis_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-gis_app}
       MARTIN_INTERNAL_URL: http://martin:3000
-      MARTIN_DOCKER_CONTAINER: geolayers-martin
     volumes:
       - media_data:/app/media
-      - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - "8001:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      martin:
-        condition: service_started
     networks:
-      - geolayers_net
-
-  martin:
-    image: ghcr.io/maplibre/martin:v0.18.1
-    container_name: geolayers-martin
-    restart: unless-stopped
-    entrypoint: ["/bin/sh", "/config/entrypoint.sh"]
-    environment:
-      MARTIN_DATABASE_URL: postgresql://${POSTGRES_USER:-gis_user}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-gis_app}
-      MARTIN_CACHE_MB: "64"
-      MARTIN_POOL_SIZE: "5"
-      MARTIN_WORKERS: "2"
-    volumes:
-      - ./martin/entrypoint.sh:/config/entrypoint.sh:ro
-    ports:
-      - "3002:3000"
-    depends_on:
-      db:
-        condition: service_healthy
-    mem_limit: 256m
-    networks:
-      - geolayers_net
+      geo_shared:
+        aliases:
+          - geolayers_web
 
 volumes:
-  postgres_data:
   media_data:
 
 networks:
-  geolayers_net:
-    driver: bridge
+  geo_shared:
+    external: true

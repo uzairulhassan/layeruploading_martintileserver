@@ -29,4 +29,6 @@ RUN mkdir -p /app/staticfiles /app/media \
 EXPOSE 8000
 
 ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "600", "--access-logfile", "-", "--error-logfile", "-"]
+# gthread: a long shapefile upload occupies one thread, not a whole worker, so tile auth
+# subrequests (one per map tile, via Nginx auth_request) keep being answered.
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--worker-class", "gthread", "--threads", "8", "--timeout", "600", "--access-logfile", "-", "--error-logfile", "-"]

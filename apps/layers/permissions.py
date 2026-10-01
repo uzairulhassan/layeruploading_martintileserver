@@ -24,7 +24,7 @@ class IsOwnerOrSharedWithPermission(BasePermission):
         if request.method in SAFE_METHODS:
             return True
 
-        if view.action in ("destroy", "share", "unshare"):
+        if view.action in ("destroy", "share", "unshare", "share_links", "revoke_share_link"):
             return False
 
         return share.permission == LayerShare.Permission.EDIT

@@ -1,9 +1,13 @@
+from datetime import timedelta
+
 from django.conf import settings
+from django.db.models import Sum
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.serializers import UserSummarySerializer
 
-from .models import LayerInfo, LayerShare
+from .models import LayerInfo, LayerShare, LayerShareLink
 
 # Map PostGIS geometry types → MapLibre / Mapbox style hints.
 _SUGGESTED_GEOMETRY = {
@@ -53,16 +57,24 @@ class LayerInfoSerializer(serializers.ModelSerializer):
             "attribute_schema", "source_filename", "created_at", "updated_at",
         ]
 
+    def _tiles_base(self):
+        """Absolute tiles base. MapLibre/Mapbox workers can't resolve relative tile URLs."""
+        base = settings.TILES_PUBLIC_URL.rstrip("/")
+        request = self.context.get("request")
+        if base.startswith("/") and request is not None:
+            base = request.build_absolute_uri(base)
+        return base
+
     def get_tile_url(self, obj):
-        """Martin source base (no z/x/y). Used by the built-in map builder."""
-        return f"{settings.MARTIN_TILE_SERVER_URL.rstrip('/')}/{obj.table_name}"
+        """Martin function-source base (no z/x/y). Kept for API compatibility; prefer xyz_url."""
+        return f"{self._tiles_base()}/{settings.MARTIN_LAYER_FUNCTION}"
 
     def get_xyz_url(self, obj):
-        """Shareable XYZ template for any external map / tile client."""
-        return f"{self.get_tile_url(obj)}/{{z}}/{{x}}/{{y}}"
+        """Full XYZ template for the map builder. Requires sign-in (owner/shared user); use share links externally."""
+        return f"{self.get_tile_url(obj)}/{{z}}/{{x}}/{{y}}?layer={obj.table_name}"
 
     def get_source_layer(self, obj):
-        """Martin / MapLibre source-layer id (PostGIS table name)."""
+        """MVT layer name inside each tile (layers_data.geolayers_tile names it after the table)."""
         return obj.table_name
 
     def get_suggested_geometry(self, obj):
@@ -77,6 +89,54 @@ class LayerInfoSerializer(serializers.ModelSerializer):
             return "owner"
         share = next((s for s in obj.shares.all() if s.shared_with_id == user.id), None)
         return share.permission if share else None
+
+
+class LayerShareLinkSerializer(serializers.ModelSerializer):
+    created_by_detail = UserSummarySerializer(source="created_by", read_only=True)
+    xyz_url = serializers.SerializerMethodField()
+    source_layer = serializers.SerializerMethodField()
+    suggested_geometry = serializers.SerializerMethodField()
+    is_expired = serializers.SerializerMethodField()
+    total_requests = serializers.SerializerMethodField()
+    requests_last_30_days = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LayerShareLink
+        fields = [
+            "id", "layer", "created_by_detail", "token", "xyz_url",
+            "source_layer", "suggested_geometry", "expires_at",
+            "is_blocked", "is_expired", "created_at",
+            "last_used_at", "total_requests", "requests_last_30_days",
+        ]
+        read_only_fields = ["id", "token", "is_blocked", "created_at", "last_used_at"]
+        extra_kwargs = {"layer": {"write_only": True}}
+
+    def validate_expires_at(self, value):
+        if value <= timezone.now():
+            raise serializers.ValidationError("Expiry must be in the future.")
+        return value
+
+    def get_xyz_url(self, obj):
+        """Shareable, revocable XYZ template — proxied through serve_shared_tile, not Martin directly."""
+        request = self.context.get("request")
+        base = request.build_absolute_uri("/") if request else "/"
+        return f"{base.rstrip('/')}/x/{obj.token}/{{z}}/{{x}}/{{y}}.pbf"
+
+    def get_source_layer(self, obj):
+        return obj.layer.table_name
+
+    def get_suggested_geometry(self, obj):
+        return _SUGGESTED_GEOMETRY.get(obj.layer.geometry_type, "line")
+
+    def get_is_expired(self, obj):
+        return obj.is_expired
+
+    def get_total_requests(self, obj):
+        return obj.usage.aggregate(total=Sum("request_count"))["total"] or 0
+
+    def get_requests_last_30_days(self, obj):
+        since = timezone.localdate() - timedelta(days=30)
+        return obj.usage.filter(date__gte=since).aggregate(total=Sum("request_count"))["total"] or 0
 
 
 class LayerUploadSerializer(serializers.Serializer):

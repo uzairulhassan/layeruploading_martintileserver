@@ -17,6 +17,11 @@ SECRET_KEY = env("SECRET_KEY", default="insecure-dev-key-change-me")
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+# Behind the shared Nginx (geo-infra), which always sets X-Forwarded-Proto.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# GeoLayers (:8081) and GeoTrak (:8000) share a host, and cookies ignore ports, so each
+# app needs its own session cookie name or logging into one logs you out of the other.
+SESSION_COOKIE_NAME = env("SESSION_COOKIE_NAME", default="geolayers_sessionid")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -73,10 +78,14 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASES = {
     "default": env.db_url(
         "DATABASE_URL",
-        default="postgis://gis_user:gis_password@localhost:5432/gis_app",
+        default="postgis://geolayers_user:geolayers_password@localhost:5432/geolayers",
         engine="django.contrib.gis.db.backends.postgis",
     )
 }
+
+# Reuse DB connections across requests (each map tile makes one auth call).
+DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=60)
+DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
 
 AUTH_USER_MODEL = "accounts.User"
 
@@ -161,14 +170,16 @@ SIMPLE_JWT = {
 # Application-specific settings
 # ---------------------------------------------------------------------------
 MAPBOX_ACCESS_TOKEN = env("MAPBOX_ACCESS_TOKEN", default="")
-MARTIN_TILE_SERVER_URL = env("MARTIN_TILE_SERVER_URL", default="http://localhost:3000")
-# Reachable from the web container (Docker service name), used to wait for catalog publish.
+# Martin is shared with GeoTrak and sits behind the shared Nginx (../geo-infra).
+# Browser-facing tiles base. A path ("/tiles") is made absolute per request; a full URL is used as-is.
+TILES_PUBLIC_URL = env("TILES_PUBLIC_URL", default="/tiles")
+# Single Martin function source that serves every layer via ?layer=<table> (migration layers.0003).
+MARTIN_LAYER_FUNCTION = env("MARTIN_LAYER_FUNCTION", default="geolayers_tile")
+# Django -> Martin inside the geo_shared Docker network (used by the share-link tile proxy).
 MARTIN_INTERNAL_URL = env("MARTIN_INTERNAL_URL", default="http://martin:3000")
-MARTIN_READY_TIMEOUT = env.int("MARTIN_READY_TIMEOUT", default=90)
-MARTIN_READY_POLL_SECONDS = env.float("MARTIN_READY_POLL_SECONDS", default=2.0)
-# Optional: restart Martin via mounted docker.sock after upload/delete (cost-efficient).
-MARTIN_DOCKER_CONTAINER = env("MARTIN_DOCKER_CONTAINER", default="")
-DOCKER_SOCKET = env("DOCKER_SOCKET", default="/var/run/docker.sock")
+# Nginx sends this in X-Tile-Auth-Secret on every tile auth subrequest.
+# It must match GEOLAYERS_TILE_AUTH_SHARED_SECRET in ../geo-infra/.env.
+TILE_AUTH_SHARED_SECRET = env("TILE_AUTH_SHARED_SECRET", default="")
 OGR2OGR_PATH = env("OGR2OGR_PATH", default="ogr2ogr")
 
 # Shapefiles are uploaded as a single .zip containing .shp/.shx/.dbf/.prj (+ optional .cpg/.qpj)
