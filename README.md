@@ -17,13 +17,13 @@ Martin instance in `../geo_infra` (function source `geolayers_tile`).
 ```
 apps/
   accounts/  User, roles, JWT auth
-  layers/    Upload pipeline, LayerInfo, tile auth, XYZ share links
+  layers/    Upload pipeline, LayerInfo, tile auth, external share links
   maps/      Saved map compositions
   core/      Template pages (dashboard, layers, maps)
 ```
 
 Upload flow: `.zip` shapefile → `ogr2ogr` → `layers_data.layer_<uuid>` →
-Martin `geolayers_tile?layer=` → Mapbox GL / XYZ share link `/x/<token>/…`.
+Martin `geolayers_tile?layer=` → Mapbox GL / external share link `/x/<token>/…`.
 
 ## Running with Docker (shared infrastructure)
 
@@ -45,7 +45,7 @@ Local live-reload: `docker compose up -d --build` (bind-mounts source).
 | --- | --- |
 | App | http://&lt;host&gt;:8081 |
 | Map builder tiles | http://&lt;host&gt;:8081/tiles/geolayers_tile/{z}/{x}/{y}?layer=layer_&lt;hex&gt; |
-| XYZ share links | http://&lt;host&gt;:8081/x/&lt;token&gt;/{z}/{x}/{y}.pbf |
+| External share links | http://&lt;host&gt;:8081/x/&lt;token&gt;/{z}/{x}/{y}.pbf |
 
 `DATABASE_URL` password must equal `GEOLAYERS_DB_PASSWORD` in `geo_infra/.env`.
 `TILE_AUTH_SHARED_SECRET` must equal `GEOLAYERS_TILE_AUTH_SHARED_SECRET` in `geo_infra/.env`.

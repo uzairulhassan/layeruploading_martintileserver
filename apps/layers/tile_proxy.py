@@ -17,7 +17,7 @@ from .tile_auth import SHARE_DENY_MESSAGE, SHARE_DENY_STATUS, check_share_link, 
 
 def _cors(response):
     """This endpoint is meant to be fetched from any origin — external sites and
-    tools are the point of an XYZ share link, and there's no cookie/session data
+    tools are the point of an external share link, and there's no cookie/session data
     involved (the token in the URL is the only credential), so a wildcard is safe."""
     response["Access-Control-Allow-Origin"] = "*"
     return response

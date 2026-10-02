@@ -70,7 +70,7 @@ class LayerInfoSerializer(serializers.ModelSerializer):
         return f"{self._tiles_base()}/{settings.MARTIN_LAYER_FUNCTION}"
 
     def get_xyz_url(self, obj):
-        """Full XYZ template for the map builder. Requires sign-in (owner/shared user); use share links externally."""
+        """Full tile URL template for the map builder. Requires sign-in (owner/shared user); use share links externally."""
         return f"{self.get_tile_url(obj)}/{{z}}/{{x}}/{{y}}?layer={obj.table_name}"
 
     def get_source_layer(self, obj):
@@ -95,8 +95,10 @@ class LayerShareLinkSerializer(serializers.ModelSerializer):
     created_by_detail = UserSummarySerializer(source="created_by", read_only=True)
     xyz_url = serializers.SerializerMethodField()
     source_layer = serializers.SerializerMethodField()
+    geometry_type = serializers.SerializerMethodField()
     suggested_geometry = serializers.SerializerMethodField()
     is_expired = serializers.SerializerMethodField()
+    never_expires = serializers.SerializerMethodField()
     total_requests = serializers.SerializerMethodField()
     requests_last_30_days = serializers.SerializerMethodField()
 
@@ -104,20 +106,25 @@ class LayerShareLinkSerializer(serializers.ModelSerializer):
         model = LayerShareLink
         fields = [
             "id", "layer", "created_by_detail", "token", "xyz_url",
-            "source_layer", "suggested_geometry", "expires_at",
-            "is_blocked", "is_expired", "created_at",
+            "source_layer", "geometry_type", "suggested_geometry", "expires_at",
+            "never_expires", "is_blocked", "is_expired", "created_at",
             "last_used_at", "total_requests", "requests_last_30_days",
         ]
         read_only_fields = ["id", "token", "is_blocked", "created_at", "last_used_at"]
-        extra_kwargs = {"layer": {"write_only": True}}
+        extra_kwargs = {
+            "layer": {"write_only": True},
+            "expires_at": {"required": False, "allow_null": True},
+        }
 
     def validate_expires_at(self, value):
+        if value is None:
+            return value
         if value <= timezone.now():
             raise serializers.ValidationError("Expiry must be in the future.")
         return value
 
     def get_xyz_url(self, obj):
-        """Shareable, revocable XYZ template — proxied through serve_shared_tile, not Martin directly."""
+        """Shareable, revocable tile URL template — proxied through serve_shared_tile, not Martin directly."""
         request = self.context.get("request")
         base = request.build_absolute_uri("/") if request else "/"
         return f"{base.rstrip('/')}/x/{obj.token}/{{z}}/{{x}}/{{y}}.pbf"
@@ -125,11 +132,17 @@ class LayerShareLinkSerializer(serializers.ModelSerializer):
     def get_source_layer(self, obj):
         return obj.layer.table_name
 
+    def get_geometry_type(self, obj):
+        return obj.layer.geometry_type
+
     def get_suggested_geometry(self, obj):
         return _SUGGESTED_GEOMETRY.get(obj.layer.geometry_type, "line")
 
     def get_is_expired(self, obj):
         return obj.is_expired
+
+    def get_never_expires(self, obj):
+        return obj.expires_at is None
 
     def get_total_requests(self, obj):
         return obj.usage.aggregate(total=Sum("request_count"))["total"] or 0

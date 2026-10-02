@@ -5,12 +5,6 @@ let MAP_ID = null;
 let SELECTED_SHARE_USER = null;
 const ADDED_MAPBOX_LAYER_IDS = [];
 
-function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
-function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
-document.querySelectorAll("[data-close-modal]").forEach((btn) => {
-  btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
-});
-
 function sourceLayerName(layer) {
   // MVT layer name inside each tile = PostGIS table name (set by layers_data.geolayers_tile)
   return layer.source_layer;
@@ -432,7 +426,7 @@ function openShareModal() {
   document.getElementById("share-submit").disabled = true;
   SELECTED_SHARE_USER = null;
   renderShareList();
-  openModal("share-modal");
+  Auth.openModal("share-modal");
 }
 
 function renderShareList() {

@@ -86,10 +86,13 @@ class LayerViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get", "post"], url_path="share-links")
     def share_links(self, request, pk=None):
-        """List or create revocable, expiring XYZ share links for this layer."""
+        """List or create revocable external share links for this layer."""
         layer = self.get_object()
         if layer.owner_id != request.user.id:
-            return Response({"detail": "Only the owner can manage XYZ share links."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "Only the owner can manage external share links."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         if request.method == "GET":
             links = layer.share_links.all()
@@ -106,7 +109,10 @@ class LayerViewSet(viewsets.ModelViewSet):
     def revoke_share_link(self, request, pk=None, link_id=None):
         layer = self.get_object()
         if layer.owner_id != request.user.id:
-            return Response({"detail": "Only the owner can manage XYZ share links."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "Only the owner can manage external share links."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         deleted, _ = LayerShareLink.objects.filter(id=link_id, layer=layer).delete()
         if not deleted:

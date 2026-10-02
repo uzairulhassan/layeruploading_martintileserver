@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}Layers · GeoTrak Layers{% endblock %}
 {% block content %}
-<div class="toolbar">
+<div class="workspace-header">
   <div>
     <h1>Layers</h1>
     <p class="lede">Upload shapefiles, style them, and share with your team.</p>
@@ -30,8 +30,11 @@
 
 <div id="upload-modal" class="modal-backdrop hidden">
   <div class="modal" role="dialog" aria-labelledby="upload-modal-title">
-    <h2 id="upload-modal-title">Upload shapefile</h2>
-    <form id="upload-form">
+    <div class="modal-header">
+      <h2 id="upload-modal-title">Upload shapefile</h2>
+      <p class="modal-sub">Import a .zip containing .shp / .shx / .dbf / .prj.</p>
+    </div>
+    <form id="upload-form" class="modal-form">
       <div class="form-group">
         <label for="upload-name">Layer name</label>
         <input type="text" id="upload-name" required>
@@ -41,7 +44,7 @@
         <textarea id="upload-description" rows="2"></textarea>
       </div>
       <div class="form-group">
-        <label for="upload-file">Shapefile (.zip with .shp / .shx / .dbf / .prj)</label>
+        <label for="upload-file">Shapefile (.zip)</label>
         <input type="file" id="upload-file" accept=".zip" required>
       </div>
       <div id="upload-error" class="error-text hidden" role="alert"></div>
@@ -55,8 +58,11 @@
 
 <div id="rename-modal" class="modal-backdrop hidden">
   <div class="modal" role="dialog" aria-labelledby="rename-modal-title">
-    <h2 id="rename-modal-title">Rename layer</h2>
-    <form id="rename-form">
+    <div class="modal-header">
+      <h2 id="rename-modal-title">Rename layer</h2>
+      <p class="modal-sub">Update the display name and optional description.</p>
+    </div>
+    <form id="rename-form" class="modal-form">
       <input type="hidden" id="rename-id">
       <div class="form-group">
         <label for="rename-name">Layer name</label>
@@ -75,47 +81,56 @@
 </div>
 
 <div id="style-modal" class="modal-backdrop hidden">
-  <div class="modal" role="dialog" aria-labelledby="style-modal-title">
-    <h2 id="style-modal-title">Layer style &amp; labels</h2>
-    <form id="style-form">
+  <div class="modal modal-wide" role="dialog" aria-labelledby="style-modal-title">
+    <div class="modal-header">
+      <h2 id="style-modal-title">Layer style &amp; labels</h2>
+      <p class="modal-sub">Adjust paint, stroke, and optional feature labels.</p>
+    </div>
+    <form id="style-form" class="modal-form">
       <input type="hidden" id="style-id">
-      <div class="form-group">
-        <label for="style-fill-color">Fill / line color</label>
-        <div class="color-field">
-          <input type="color" id="style-fill-color-picker" value="#0F2D53" aria-label="Pick fill / line color">
-          <input type="text" id="style-fill-color" placeholder="#0F2D53" spellcheck="false">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="style-fill-color">Fill / line color</label>
+          <div class="color-field">
+            <input type="color" id="style-fill-color-picker" value="#0F2D53" aria-label="Pick fill / line color">
+            <input type="text" id="style-fill-color" placeholder="#0F2D53" spellcheck="false">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="style-stroke-color">Stroke color</label>
+          <div class="color-field">
+            <input type="color" id="style-stroke-color-picker" value="#0a2140" aria-label="Pick stroke color">
+            <input type="text" id="style-stroke-color" placeholder="#0a2140" spellcheck="false">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="style-stroke-width">Stroke width (px)</label>
+          <input type="number" id="style-stroke-width" min="0" step="0.5" value="1">
+        </div>
+        <div class="form-group">
+          <label for="style-opacity">Fill opacity</label>
+          <input type="number" id="style-opacity" min="0" max="1" step="0.05" value="0.6">
         </div>
       </div>
-      <div class="form-group">
-        <label for="style-stroke-color">Stroke color</label>
-        <div class="color-field">
-          <input type="color" id="style-stroke-color-picker" value="#0a2140" aria-label="Pick stroke color">
-          <input type="text" id="style-stroke-color" placeholder="#0a2140" spellcheck="false">
+      <div class="modal-section">
+        <p class="modal-section-title">Labels</p>
+        <div class="form-grid">
+          <div class="form-group form-grid-span">
+            <label for="label-field">Label field</label>
+            <select id="label-field"><option value="">(no labels)</option></select>
+          </div>
+          <div class="form-group">
+            <label for="label-color">Label text color</label>
+            <div class="color-field">
+              <input type="color" id="label-color-picker" value="#0F2D53" aria-label="Pick label text color">
+              <input type="text" id="label-color" placeholder="#0F2D53" spellcheck="false">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="label-size">Label size (px)</label>
+            <input type="number" id="label-size" min="8" max="36" value="12">
+          </div>
         </div>
-      </div>
-      <div class="form-group">
-        <label for="style-stroke-width">Stroke width (px)</label>
-        <input type="number" id="style-stroke-width" min="0" step="0.5" value="1">
-      </div>
-      <div class="form-group">
-        <label for="style-opacity">Fill opacity</label>
-        <input type="number" id="style-opacity" min="0" max="1" step="0.05" value="0.6">
-      </div>
-      <hr>
-      <div class="form-group">
-        <label for="label-field">Label field</label>
-        <select id="label-field"><option value="">(no labels)</option></select>
-      </div>
-      <div class="form-group">
-        <label for="label-color">Label text color</label>
-        <div class="color-field">
-          <input type="color" id="label-color-picker" value="#0F2D53" aria-label="Pick label text color">
-          <input type="text" id="label-color" placeholder="#0F2D53" spellcheck="false">
-        </div>
-      </div>
-      <div class="form-group">
-        <label for="label-size">Label size (px)</label>
-        <input type="number" id="label-size" min="8" max="36" value="12">
       </div>
       <div class="modal-actions">
         <button type="button" class="btn" data-close-modal="style-modal">Cancel</button>
@@ -127,71 +142,94 @@
 
 <div id="share-modal" class="modal-backdrop hidden">
   <div class="modal modal-share" role="dialog" aria-labelledby="share-layer-title">
-    <h2 id="share-layer-title">Share layer</h2>
-    <input type="hidden" id="share-layer-id">
-
-    <div class="share-tabs" role="tablist" aria-label="Share options">
-      <button type="button" class="share-tab is-active" role="tab" id="share-tab-people" aria-selected="true" aria-controls="share-panel-people" data-share-tab="people">
-        People
-      </button>
-      <button type="button" class="share-tab" role="tab" id="share-tab-xyz" aria-selected="false" aria-controls="share-panel-xyz" data-share-tab="xyz">
-        XYZ link
-      </button>
+    <div class="modal-header">
+      <h2 id="share-layer-title">Share layer</h2>
+      <p class="modal-sub" id="share-layer-sub">Invite people or create an external tile link.</p>
     </div>
+    <div class="modal-body">
+      <input type="hidden" id="share-layer-id">
 
-    <div id="share-panel-people" class="share-panel is-active" role="tabpanel" aria-labelledby="share-tab-people">
-      <div id="share-people-owner">
-        <div class="form-group">
-          <label for="share-search">Find user (username or email)</label>
-          <input type="text" id="share-search">
-          <div id="share-results" class="share-results muted"></div>
-        </div>
-        <div class="form-group">
-          <label for="share-permission">Permission</label>
-          <select id="share-permission">
-            <option value="view">View only</option>
-            <option value="edit">Can edit style &amp; labels</option>
-          </select>
-        </div>
-        <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
-        <p class="share-heading">Currently shared with</p>
-        <ul id="share-list" class="share-list muted"></ul>
+      <div class="share-tabs" role="tablist" aria-label="Share options">
+        <button type="button" class="share-tab is-active" role="tab" id="share-tab-people" aria-selected="true" aria-controls="share-panel-people" data-share-tab="people">
+          People
+        </button>
+        <button type="button" class="share-tab" role="tab" id="share-tab-external" aria-selected="false" aria-controls="share-panel-external" data-share-tab="external">
+          External Share
+        </button>
       </div>
-      <div id="share-people-viewer" class="share-viewer-note hidden">
-        <p>Only the layer owner can share with other users.</p>
-      </div>
-    </div>
 
-    <div id="share-panel-xyz" class="share-panel" role="tabpanel" aria-labelledby="share-tab-xyz" hidden>
-      <div id="xyz-owner-only">
-        <p class="share-xyz-lede">
-          Create a link that serves this layer's vector tiles to anyone who has it — no
-          account required. Pick an expiry date; you (or an admin) can revoke it any time
-          before then.
-        </p>
-
-        <div class="xyz-card">
-          <div class="xyz-card-label"><span>New share link</span></div>
-          <div class="form-group" style="margin-bottom:0.65rem;">
-            <label for="xyz-expiry">Expires on</label>
-            <input type="date" id="xyz-expiry" required>
+      <div id="share-panel-people" class="share-panel is-active" role="tabpanel" aria-labelledby="share-tab-people">
+        <div id="share-people-owner">
+          <div class="share-invite">
+            <div class="form-group">
+              <label for="share-search">Find user</label>
+              <input type="text" id="share-search" placeholder="Username or email" autocomplete="off">
+              <div id="share-results" class="share-results muted"></div>
+            </div>
+            <div class="form-group">
+              <label for="share-permission">Permission</label>
+              <select id="share-permission">
+                <option value="view">View only</option>
+                <option value="edit">Can edit style &amp; labels</option>
+              </select>
+            </div>
+            <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
           </div>
-          <button type="button" class="btn btn-primary btn-block" id="xyz-create-btn">Create link</button>
-          <div id="xyz-create-error" class="error-text hidden" role="alert"></div>
+          <div class="share-list-block">
+            <p class="share-heading">Currently shared with</p>
+            <ul id="share-list" class="share-list muted"></ul>
+          </div>
+        </div>
+        <div id="share-people-viewer" class="share-viewer-note hidden">
+          <p>Only the layer owner can share with other users.</p>
+        </div>
+      </div>
+
+      <div id="share-panel-external" class="share-panel" role="tabpanel" aria-labelledby="share-tab-external" hidden>
+        <div id="external-owner-only">
+          <p class="share-external-lede">
+            Generate a public tile URL for external tools and maps. No account is required to
+            use the link. You can set an expiry or leave it open, and revoke access at any time.
+          </p>
+
+          <div class="external-create-card">
+            <div class="external-create-header">
+              <span class="external-create-title">New external link</span>
+            </div>
+
+            <div class="external-expiry-row">
+              <div class="form-group external-expiry-field">
+                <label for="external-expiry">Expires on</label>
+                <input type="date" id="external-expiry">
+              </div>
+              <label class="external-no-expiry" for="external-no-expiry">
+                <input type="checkbox" id="external-no-expiry">
+                <span>
+                  <strong>No expiry</strong>
+                  <small>Link stays valid until you revoke it</small>
+                </span>
+              </label>
+            </div>
+
+            <button type="button" class="btn btn-primary btn-block" id="external-create-btn">Create link</button>
+            <div id="external-create-error" class="error-text hidden" role="alert"></div>
+          </div>
+
+          <div class="share-list-block">
+            <p class="share-heading">Active links</p>
+            <ul id="external-links-list" class="share-list external-links-list muted"></ul>
+          </div>
+        </div>
+        <div id="external-viewer-note" class="share-viewer-note hidden">
+          <p>Only the layer owner can create or manage external share links.</p>
         </div>
 
-        <p class="share-heading">Active links</p>
-        <ul id="xyz-links-list" class="share-list muted"></ul>
-      </div>
-      <div id="xyz-viewer-note" class="share-viewer-note hidden">
-        <p>Only the layer owner can create or manage XYZ share links.</p>
+        <p id="external-copy-status" class="external-toast" role="status" aria-live="polite"></p>
       </div>
 
-      <p id="xyz-copy-status" class="xyz-toast" role="status" aria-live="polite"></p>
-    </div>
-
-    <div class="modal-actions">
-      <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+      </div>
     </div>
   </div>
 </div>

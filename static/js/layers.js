@@ -1,13 +1,6 @@
 let CURRENT_LAYERS = [];
 let SELECTED_SHARE_USER = null;
 
-function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
-function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
-
-document.querySelectorAll("[data-close-modal]").forEach((btn) => {
-  btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
-});
-
 async function loadLayers() {
   const res = await Auth.apiFetch("/api/layers/");
   const data = await res.json();
@@ -57,7 +50,7 @@ function handleRowAction(action, id) {
 }
 
 // ---- Upload ----
-document.getElementById("open-upload-modal").addEventListener("click", () => openModal("upload-modal"));
+document.getElementById("open-upload-modal").addEventListener("click", () => Auth.openModal("upload-modal"));
 
 document.getElementById("upload-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -79,7 +72,7 @@ document.getElementById("upload-form").addEventListener("submit", async (event) 
       throw new Error(body.detail || JSON.stringify(body));
     }
     document.getElementById("upload-form").reset();
-    closeModal("upload-modal");
+    Auth.closeModal("upload-modal");
     await loadLayers();
   } catch (err) {
     errorBox.textContent = err.message;
@@ -95,7 +88,7 @@ function openRenameModal(layer) {
   document.getElementById("rename-id").value = layer.id;
   document.getElementById("rename-name").value = layer.name;
   document.getElementById("rename-description").value = layer.description || "";
-  openModal("rename-modal");
+  Auth.openModal("rename-modal");
 }
 
 document.getElementById("rename-form").addEventListener("submit", async (event) => {
@@ -107,7 +100,7 @@ document.getElementById("rename-form").addEventListener("submit", async (event) 
   };
   const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "PATCH", body: payload });
   if (res.ok) {
-    closeModal("rename-modal");
+    Auth.closeModal("rename-modal");
     await loadLayers();
   }
 });
@@ -173,7 +166,7 @@ function openStyleModal(layer) {
     el.disabled = !canEdit;
   });
 
-  openModal("style-modal");
+  Auth.openModal("style-modal");
 }
 
 document.getElementById("style-form").addEventListener("submit", async (event) => {
@@ -194,45 +187,57 @@ document.getElementById("style-form").addEventListener("submit", async (event) =
   };
   const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "PATCH", body: payload });
   if (res.ok) {
-    closeModal("style-modal");
+    Auth.closeModal("style-modal");
     await loadLayers();
   }
 });
 
-// ---- Share (people + XYZ) ----
+// ---- Share (people + External Share) ----
 let SHARE_COPY_RESET = null;
 let CURRENT_SHARE_LAYER = null;
 
 function setShareTab(tab) {
   const peopleTab = document.getElementById("share-tab-people");
-  const xyzTab = document.getElementById("share-tab-xyz");
+  const externalTab = document.getElementById("share-tab-external");
   const peoplePanel = document.getElementById("share-panel-people");
-  const xyzPanel = document.getElementById("share-panel-xyz");
-  const isXyz = tab === "xyz";
+  const externalPanel = document.getElementById("share-panel-external");
+  const isExternal = tab === "external";
 
-  peopleTab.classList.toggle("is-active", !isXyz);
-  xyzTab.classList.toggle("is-active", isXyz);
-  peopleTab.setAttribute("aria-selected", String(!isXyz));
-  xyzTab.setAttribute("aria-selected", String(isXyz));
+  peopleTab.classList.toggle("is-active", !isExternal);
+  externalTab.classList.toggle("is-active", isExternal);
+  peopleTab.setAttribute("aria-selected", String(!isExternal));
+  externalTab.setAttribute("aria-selected", String(isExternal));
 
-  peoplePanel.classList.toggle("is-active", !isXyz);
-  xyzPanel.classList.toggle("is-active", isXyz);
-  if (isXyz) {
+  peoplePanel.classList.toggle("is-active", !isExternal);
+  externalPanel.classList.toggle("is-active", isExternal);
+  if (isExternal) {
     peoplePanel.hidden = true;
-    xyzPanel.hidden = false;
-    xyzPanel.classList.add("is-entering");
-    window.setTimeout(() => xyzPanel.classList.remove("is-entering"), 280);
+    externalPanel.hidden = false;
+    externalPanel.classList.add("is-entering");
+    window.setTimeout(() => externalPanel.classList.remove("is-entering"), 280);
   } else {
-    xyzPanel.hidden = true;
+    externalPanel.hidden = true;
     peoplePanel.hidden = false;
     peoplePanel.classList.add("is-entering");
     window.setTimeout(() => peoplePanel.classList.remove("is-entering"), 280);
   }
 }
 
+function syncExternalExpiryControls() {
+  const noExpiry = document.getElementById("external-no-expiry").checked;
+  const expiryInput = document.getElementById("external-expiry");
+  expiryInput.disabled = noExpiry;
+  expiryInput.required = !noExpiry;
+  if (noExpiry) {
+    expiryInput.value = "";
+  }
+}
+
 function openShareModal(layer) {
   CURRENT_SHARE_LAYER = layer;
   document.getElementById("share-layer-id").value = layer.id;
+  document.getElementById("share-layer-sub").textContent =
+    `Sharing “${layer.name}” with teammates or via an external tile link.`;
   document.getElementById("share-search").value = "";
   document.getElementById("share-results").innerHTML = "";
   document.getElementById("share-submit").disabled = true;
@@ -241,31 +246,33 @@ function openShareModal(layer) {
   const isOwner = layer.my_permission === "owner";
   document.getElementById("share-people-owner").classList.toggle("hidden", !isOwner);
   document.getElementById("share-people-viewer").classList.toggle("hidden", isOwner);
-  document.getElementById("xyz-owner-only").classList.toggle("hidden", !isOwner);
-  document.getElementById("xyz-viewer-note").classList.toggle("hidden", isOwner);
+  document.getElementById("external-owner-only").classList.toggle("hidden", !isOwner);
+  document.getElementById("external-viewer-note").classList.toggle("hidden", isOwner);
 
-  document.getElementById("xyz-copy-status").textContent = "";
-  document.getElementById("xyz-copy-status").classList.remove("is-visible");
-  document.getElementById("xyz-create-error").classList.add("hidden");
+  document.getElementById("external-copy-status").textContent = "";
+  document.getElementById("external-copy-status").classList.remove("is-visible");
+  document.getElementById("external-create-error").classList.add("hidden");
 
-  const expiryInput = document.getElementById("xyz-expiry");
+  const expiryInput = document.getElementById("external-expiry");
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   expiryInput.min = tomorrow;
   expiryInput.value = "";
+  document.getElementById("external-no-expiry").checked = false;
+  syncExternalExpiryControls();
 
   if (isOwner) renderShareList(layer);
   if (isOwner) loadShareLinks(layer.id);
   setShareTab("people");
-  openModal("share-modal");
+  Auth.openModal("share-modal");
 }
 
-// ---- XYZ share links (expiring, revocable) ----
+// ---- External share links (optional expiry, revocable) ----
 async function loadShareLinks(layerId) {
-  const list = document.getElementById("xyz-links-list");
-  list.innerHTML = `<li class="muted">Loading…</li>`;
+  const list = document.getElementById("external-links-list");
+  list.innerHTML = `<li class="share-empty">Loading…</li>`;
   const res = await Auth.apiFetch(`/api/layers/${layerId}/share-links/`);
   if (!res.ok) {
-    list.innerHTML = `<li class="muted">Could not load share links.</li>`;
+    list.innerHTML = `<li class="share-empty">Could not load share links.</li>`;
     return;
   }
   const links = await res.json();
@@ -277,74 +284,134 @@ function formatExpiry(isoString) {
   return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-function formatUsage(link) {
-  if (!link.total_requests) return "never used";
-  const last = link.last_used_at ? `, last used ${formatExpiry(link.last_used_at)}` : "";
-  return `${link.total_requests.toLocaleString()} tile requests (${link.requests_last_30_days.toLocaleString()} in 30 days)${last}`;
+function simplifyGeometryLabel(geometryType, suggestedGeometry) {
+  const suggested = String(suggestedGeometry || "").toLowerCase();
+  if (suggested === "line" || suggested === "fill" || suggested === "circle") {
+    return suggested;
+  }
+  const raw = String(geometryType || "").toLowerCase();
+  if (raw.includes("line")) return "line";
+  if (raw.includes("polygon")) return "fill";
+  if (raw.includes("point")) return "circle";
+  return raw || "—";
+}
+
+function formatExpiryLabel(link) {
+  if (link.never_expires || !link.expires_at) {
+    return `<span class="external-pill external-pill-live">No expiry</span>`;
+  }
+  if (link.is_expired) {
+    return `<span class="external-pill external-pill-expired">Expired ${formatExpiry(link.expires_at)}</span>`;
+  }
+  return `<span class="external-pill">Expires ${formatExpiry(link.expires_at)}</span>`;
 }
 
 function renderShareLinks(layerId, links) {
-  const list = document.getElementById("xyz-links-list");
+  const list = document.getElementById("external-links-list");
   if (!links.length) {
-    list.innerHTML = `<li class="muted">No active share links yet.</li>`;
+    list.innerHTML = `<li class="share-empty">No active external share links yet.</li>`;
     return;
   }
-  list.innerHTML = links.map((link) => `
-    <li data-link-id="${link.id}">
-      <div style="flex:1; min-width:0;">
-        <code class="xyz-chip" style="display:block; margin-bottom:0.3rem;">${link.xyz_url}</code>
-        <span class="muted" style="font-size:0.78rem;">
-          ${link.is_expired ? "Expired" : "Expires"} ${formatExpiry(link.expires_at)}
-          ${link.is_blocked ? " &middot; blocked by admin" : ""}
-          &middot; ${formatUsage(link)}
-        </span>
+  list.innerHTML = links.map((link) => {
+    const geometryLabel = simplifyGeometryLabel(link.geometry_type, link.suggested_geometry);
+    const requests = Number(link.total_requests || 0).toLocaleString();
+    const lastUsed = link.last_used_at ? formatExpiry(link.last_used_at) : "Never";
+    return `
+    <li class="external-link-card" data-link-id="${link.id}">
+      <div class="external-link-top">
+        <div class="external-link-badges">
+          ${formatExpiryLabel(link)}
+          ${link.is_blocked ? `<span class="external-pill external-pill-blocked">Blocked</span>` : ""}
+        </div>
+        <div class="external-link-actions">
+          <button type="button" class="btn btn-sm" data-copy-link="${Auth.escapeHtml(link.xyz_url)}">Copy URL</button>
+          <button type="button" class="btn btn-sm btn-danger" data-revoke-link="${link.id}">Revoke</button>
+        </div>
       </div>
-      <div style="display:flex; gap:0.4rem; flex:0 0 auto;">
-        <button type="button" class="btn btn-sm" data-copy-link="${link.xyz_url}">Copy</button>
-        <button type="button" class="btn btn-sm btn-danger" data-revoke-link="${link.id}">Revoke</button>
+
+      <div class="external-field">
+        <span class="external-field-label">Tile URL</span>
+        <code class="external-chip">${Auth.escapeHtml(link.xyz_url)}</code>
       </div>
-    </li>
-  `).join("");
+
+      <div class="external-meta-grid">
+        <div class="external-field">
+          <span class="external-field-label">Source layer</span>
+          <div class="external-chip-row">
+            <code class="external-chip">${Auth.escapeHtml(link.source_layer)}</code>
+            <button type="button" class="btn btn-sm" data-copy-source="${Auth.escapeHtml(link.source_layer)}">Copy</button>
+          </div>
+        </div>
+        <div class="external-field">
+          <span class="external-field-label">Geometry</span>
+          <span class="external-geom-value">${Auth.escapeHtml(geometryLabel)}</span>
+        </div>
+      </div>
+
+      <div class="external-stats" aria-label="Usage">
+        <div class="external-stat">
+          <span class="external-stat-label">Tile requests</span>
+          <span class="external-stat-value">${requests}</span>
+        </div>
+        <div class="external-stat">
+          <span class="external-stat-label">Last used</span>
+          <span class="external-stat-value">${Auth.escapeHtml(lastUsed)}</span>
+        </div>
+      </div>
+    </li>`;
+  }).join("");
 
   list.querySelectorAll("[data-copy-link]").forEach((btn) => {
-    btn.addEventListener("click", () => copyToClipboardWithFeedback(btn.dataset.copyLink, btn, "Link copied."));
+    btn.addEventListener("click", () => copyToClipboardWithFeedback(btn.dataset.copyLink, btn, "Tile URL copied."));
+  });
+  list.querySelectorAll("[data-copy-source]").forEach((btn) => {
+    btn.addEventListener("click", () => copyToClipboardWithFeedback(btn.dataset.copySource, btn, "Source layer copied."));
   });
   list.querySelectorAll("[data-revoke-link]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm("Revoke this share link? Anyone using it will immediately lose access.")) return;
+      if (!confirm("Revoke this external share link? Anyone using it will immediately lose access.")) return;
       await Auth.apiFetch(`/api/layers/${layerId}/share-links/${btn.dataset.revokeLink}/`, { method: "DELETE" });
       await loadShareLinks(layerId);
     });
   });
 }
 
-document.getElementById("xyz-create-btn").addEventListener("click", async () => {
+document.getElementById("external-no-expiry").addEventListener("change", syncExternalExpiryControls);
+
+document.getElementById("external-create-btn").addEventListener("click", async () => {
   const layer = CURRENT_SHARE_LAYER;
   if (!layer) return;
-  const errorBox = document.getElementById("xyz-create-error");
+  const errorBox = document.getElementById("external-create-error");
   errorBox.classList.add("hidden");
 
-  const expiryValue = document.getElementById("xyz-expiry").value;
-  if (!expiryValue) {
-    errorBox.textContent = "Pick an expiry date.";
-    errorBox.classList.remove("hidden");
-    return;
-  }
-  // End-of-day in the browser's local time, sent as an absolute instant.
-  const expiresAt = new Date(`${expiryValue}T23:59:59`);
+  const noExpiry = document.getElementById("external-no-expiry").checked;
+  const expiryValue = document.getElementById("external-expiry").value;
+  let body = { expires_at: null };
 
-  const btn = document.getElementById("xyz-create-btn");
+  if (!noExpiry) {
+    if (!expiryValue) {
+      errorBox.textContent = "Pick an expiry date, or enable No expiry.";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+    // End-of-day in the browser's local time, sent as an absolute instant.
+    body = { expires_at: new Date(`${expiryValue}T23:59:59`).toISOString() };
+  }
+
+  const btn = document.getElementById("external-create-btn");
   btn.disabled = true;
   try {
     const res = await Auth.apiFetch(`/api/layers/${layer.id}/share-links/`, {
       method: "POST",
-      body: { expires_at: expiresAt.toISOString() },
+      body,
     });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.expires_at?.[0] || body.detail || "Could not create the link.");
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.expires_at?.[0] || errBody.detail || "Could not create the link.");
     }
-    document.getElementById("xyz-expiry").value = "";
+    document.getElementById("external-expiry").value = "";
+    document.getElementById("external-no-expiry").checked = false;
+    syncExternalExpiryControls();
     await loadShareLinks(layer.id);
   } catch (err) {
     errorBox.textContent = err.message;
@@ -358,12 +425,13 @@ function renderShareList(layer) {
   const list = document.getElementById("share-list");
   const shares = layer.shares || [];
   if (!shares.length) {
-    list.innerHTML = `<li>Not shared with anyone yet.</li>`;
+    list.innerHTML = `<li class="share-empty">Not shared with anyone yet.</li>`;
     return;
   }
   list.innerHTML = shares.map((s) => `
-    <li>${s.shared_with_detail.display_name} — ${s.permission}
-      <button class="btn btn-link" data-remove-share="${s.shared_with_detail.id}">remove</button>
+    <li class="share-person-row">
+      <span>${s.shared_with_detail.display_name} — ${s.permission}</span>
+      <button class="btn btn-link" data-remove-share="${s.shared_with_detail.id}">Remove</button>
     </li>
   `).join("");
   list.querySelectorAll("[data-remove-share]").forEach((btn) => {
@@ -425,12 +493,12 @@ document.querySelectorAll("[data-share-tab]").forEach((btn) => {
 });
 
 async function copyToClipboardWithFeedback(text, button, successText) {
-  const status = document.getElementById("xyz-copy-status");
+  const status = document.getElementById("external-copy-status");
   clearTimeout(SHARE_COPY_RESET);
 
   try {
     await copyTextToClipboard(text);
-    document.querySelectorAll("#xyz-links-list .is-copied").forEach((btn) => btn.classList.remove("is-copied"));
+    document.querySelectorAll("#external-links-list .is-copied").forEach((btn) => btn.classList.remove("is-copied"));
     button.classList.add("is-copied");
     status.textContent = successText;
     status.classList.add("is-visible");

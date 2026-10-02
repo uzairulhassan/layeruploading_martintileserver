@@ -85,12 +85,14 @@ def _generate_share_token() -> str:
 
 
 class LayerShareLink(models.Model):
-    """A revocable, expiring public link that serves a layer's XYZ vector tiles.
+    """A revocable public link that serves a layer's vector tiles externally.
 
     Unlike the owner/shared-user model above, anyone with the link's token can
     fetch tiles through ``serve_shared_tile`` (no account required) until it
     expires or is blocked — so tiles are proxied through that view rather than
     handed out as a raw Martin URL, which could never be revoked.
+
+    ``expires_at`` may be null for links that never expire (still revocable).
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -99,7 +101,11 @@ class LayerShareLink(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="layer_share_links"
     )
     token = models.CharField(max_length=64, unique=True, editable=False, default=_generate_share_token)
-    expires_at = models.DateTimeField()
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Leave blank for a link that never expires (still revocable).",
+    )
     is_blocked = models.BooleanField(default=False, help_text="Admins can block a link without deleting it.")
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
@@ -112,6 +118,8 @@ class LayerShareLink(models.Model):
 
     @property
     def is_expired(self) -> bool:
+        if self.expires_at is None:
+            return False
         return timezone.now() >= self.expires_at
 
     @property
