@@ -2327,29 +2327,6 @@ button.person-row.share-hit:hover {
   color: var(--navy);
 }
 
-.access-badge.is-owner {
-  border-color: rgba(var(--ink-rgb), 0.35);
-  background: rgba(var(--ink-rgb), 0.06);
-}
-
-.access-badge.is-owner .access-badge-value {
-  color: var(--navy);
-}
-
-.access-badge.is-edit {
-  border-color: rgba(31, 143, 95, 0.35);
-  background: rgba(31, 143, 95, 0.08);
-}
-
-.access-badge.is-edit .access-badge-value {
-  color: var(--success);
-}
-
-.access-badge.is-view {
-  border-color: rgba(var(--ink-rgb), 0.18);
-  background: rgba(var(--ink-rgb), 0.03);
-}
-
 .builder-section {
   margin-top: 0.35rem;
   padding-top: 1rem;

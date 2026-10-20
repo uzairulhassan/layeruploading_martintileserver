@@ -22,27 +22,23 @@ async function init() {
   const root = document.getElementById("builder-root");
   mapboxgl.accessToken = root.dataset.mapboxToken || "";
   MAP_ID = root.dataset.mapId || "";
-
   if (!MAP_ID) {
-    document.getElementById("create-panel").classList.remove("hidden");
-    document.getElementById("create-map-btn").addEventListener("click", createMap);
+    console.error("Map builder requires a map id.");
     return;
   }
-
-  document.getElementById("builder-panel").classList.remove("hidden");
   await loadMap();
 }
 
-async function createMap() {
-  const name = document.getElementById("new-map-name").value.trim();
-  if (!name) return;
-  const res = await Auth.apiFetch("/api/maps/", {
-    method: "POST",
-    body: { name, basemap_style: "mapbox://styles/mapbox/streets-v12", center_lng: 0, center_lat: 0, zoom: 2 },
-  });
-  if (res.ok) {
-    const data = await res.json();
-    window.location.href = `/maps/${data.id}/`;
+function toggleMapNameEditing() {
+  const input = document.getElementById("map-name-input");
+  const btn = document.getElementById("edit-map-name-btn");
+  if (!input || input.disabled) return;
+  const editing = input.classList.toggle("is-editing");
+  input.readOnly = !editing;
+  btn?.classList.toggle("is-active", editing);
+  if (editing) {
+    input.focus();
+    input.select();
   }
 }
 
@@ -58,14 +54,22 @@ async function loadMap() {
   document.getElementById("basemap-select").value = MAP_DATA.basemap_style;
 
   const readOnly = MAP_DATA.my_permission === "view";
-  document.getElementById("permission-note").textContent = readOnly
-    ? "You have view-only access to this map."
-    : `Your access: ${MAP_DATA.my_permission}`;
+  const permissionLabels = { owner: "Owner", edit: "Can edit", view: "View only" };
+  const permissionValue = document.getElementById("permission-value");
+  if (permissionValue) {
+    permissionValue.textContent =
+      permissionLabels[MAP_DATA.my_permission] || MAP_DATA.my_permission || "—";
+  }
   document.getElementById("save-map-btn").classList.toggle("hidden", readOnly);
   document.getElementById("share-map-btn").classList.toggle("hidden", MAP_DATA.my_permission !== "owner");
   document.getElementById("map-name-input").disabled = readOnly;
   document.getElementById("basemap-select").disabled = readOnly;
-  document.querySelector("#builder-panel .map-sidebar h3:last-of-type").classList.toggle("hidden", readOnly);
+  const editNameBtn = document.getElementById("edit-map-name-btn");
+  if (editNameBtn) {
+    editNameBtn.classList.toggle("hidden", readOnly);
+    editNameBtn.onclick = () => toggleMapNameEditing();
+  }
+  document.getElementById("available-layers-section")?.classList.toggle("hidden", readOnly);
   document.getElementById("available-layers").classList.toggle("hidden", readOnly);
 
   if (!GL_MAP) {
