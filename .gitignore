@@ -34,6 +34,9 @@ staticfiles/
 # OS
 .DS_Store
 
+# Local-only decks / screenshots (do not push)
+docs/
+
 # Uploaded shapefile temp extraction / local samples (never commit)
 tmp_uploads/
 _tmp_*/
