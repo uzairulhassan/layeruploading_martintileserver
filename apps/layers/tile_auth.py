@@ -7,6 +7,8 @@ Nginx on :8081 sends a subrequest to ``validate_tile_request`` for two kinds of 
   identified by the Django session cookie or a ``Bearer`` JWT.
 * ``/x/<share-token>/{z}/{x}/{y}.pbf``  - revocable, expiring public share links
   (``LayerShareLink``). No account is needed; the token is checked on every tile.
+  The same token also unlocks ``/x/<token>/style.json`` (served by Django, not
+  this auth_request path).
 
 On success Django returns 204 plus ``X-Tile-Layer: <table>``, and Nginx proxies
 to Martin with *that* table. The client's own ``?layer=`` is never trusted.

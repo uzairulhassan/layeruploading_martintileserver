@@ -5,10 +5,12 @@ from django.urls import include, path, re_path
 from django.views.static import serve
 
 from apps.layers.tile_auth import validate_tile_request
-from apps.layers.tile_proxy import serve_shared_tile
+from apps.layers.tile_proxy import serve_shared_style, serve_shared_tile
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # Style document for the same share token (always Django; Nginx only special-cases .pbf).
+    path("x/<str:token>/style.json", serve_shared_style, name="shared_style"),
     # Behind Nginx this path is served by Nginx + Martin directly; the view is the no-Nginx fallback.
     path("x/<str:token>/<int:z>/<int:x>/<int:y>.pbf", serve_shared_tile, name="shared_tile"),
     # Nginx auth_request target (blocked publicly by Nginx; see ../geo-infra).

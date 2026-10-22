@@ -158,6 +158,7 @@ class ShareLinkApiTests(TestCase):
         body = res.json()
         self.assertGreaterEqual(len(body["token"]), 24)
         self.assertEqual(body["xyz_url"], f"http://testserver/x/{body['token']}/{{z}}/{{x}}/{{y}}.pbf")
+        self.assertEqual(body["style_url"], f"http://testserver/x/{body['token']}/style.json")
         self.assertEqual(body["total_requests"], 0)
         self.assertIsNone(body["last_used_at"])
         self.assertFalse(body["never_expires"])
@@ -199,7 +200,8 @@ class ShareLinkApiTests(TestCase):
         )
         self.api.force_authenticate(self.owner)
         listed = self.api.get(self._links_url()).json()
-        self.assertEqual((listed[0]["total_requests"], listed[0]["requests_last_30_days"]), (12, 7))
+        self.assertEqual(listed[0]["total_requests"], 12)
+        self.assertNotIn("requests_last_30_days", listed[0])
 
         res = self.api.delete(f"{self._links_url()}{link.id}/")
         self.assertEqual(res.status_code, 204)
@@ -247,6 +249,60 @@ class ShareTileFallbackProxyTests(TestCase):
             expires_at=timezone.now() + timedelta(days=1), is_blocked=True
         )
         self.assertEqual(self.client.get(f"/x/{self.link.token}/1/1/1.pbf").status_code, 403)
+
+
+class ShareStyleDocumentTests(TestCase):
+    """Public ``/x/<token>/style.json`` mirrors GeoLayers paint for the same share token."""
+
+    def setUp(self):
+        owner = get_user_model().objects.create_user("owner", "owner@example.com", "pw-12345!")
+        self.layer = LayerInfo.objects.create(
+            owner=owner,
+            name="Styled roads",
+            schema_name="layers_data",
+            table_name=TABLE,
+            geometry_type=LayerInfo.GeometryType.LINESTRING,
+            style={"color": "#ff0000", "strokeWidth": 3, "opacity": 0.9},
+            label_config={"field": "name", "size": 14, "color": "#111111"},
+        )
+        self.link = LayerShareLink.objects.create(
+            layer=self.layer, created_by=owner, expires_at=timezone.now() + timedelta(days=1)
+        )
+
+    def test_style_json_matches_layer_and_points_at_share_tiles(self):
+        res = self.client.get(f"/x/{self.link.token}/style.json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res["Access-Control-Allow-Origin"], "*")
+        self.assertIn("application/json", res["Content-Type"])
+
+        body = res.json()
+        self.assertEqual(body["version"], 8)
+        self.assertEqual(body["name"], "Styled roads")
+        self.assertEqual(
+            body["sources"]["geolayers"]["tiles"],
+            [f"http://testserver/x/{self.link.token}/{{z}}/{{x}}/{{y}}.pbf"],
+        )
+        self.assertEqual(body["metadata"]["geolayers:source_layer"], TABLE)
+        self.assertEqual(body["metadata"]["geolayers:geometry_type"], "LineString")
+        self.assertEqual(body["metadata"]["geolayers:style"]["color"], "#ff0000")
+
+        line = next(layer for layer in body["layers"] if layer["type"] == "line" and "label" not in layer["id"])
+        self.assertEqual(line["source-layer"], TABLE)
+        self.assertEqual(line["paint"]["line-color"], "#ff0000")
+        self.assertEqual(line["paint"]["line-width"], 3)
+
+        label = next(layer for layer in body["layers"] if layer["type"] == "symbol")
+        self.assertEqual(label["layout"]["text-field"], ["get", "name"])
+        self.assertIn("glyphs", body)
+
+    def test_style_json_respects_share_link_lifecycle(self):
+        self.assertEqual(self.client.get("/x/nope/style.json").status_code, 404)
+        LayerShareLink.objects.filter(pk=self.link.pk).update(expires_at=timezone.now() - timedelta(seconds=1))
+        self.assertEqual(self.client.get(f"/x/{self.link.token}/style.json").status_code, 410)
+        LayerShareLink.objects.filter(pk=self.link.pk).update(
+            expires_at=timezone.now() + timedelta(days=1), is_blocked=True
+        )
+        self.assertEqual(self.client.get(f"/x/{self.link.token}/style.json").status_code, 403)
 
 
 # ---------------------------------------------------------------------------------------------

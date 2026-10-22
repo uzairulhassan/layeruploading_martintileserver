@@ -6,7 +6,7 @@ const Theme = (() => {
   const STORAGE_KEY = "geolayers_theme";
   const DEFAULT_THEME = "classic";
   const THEMES = [
-    { id: "classic", label: "Classic", hint: "Navy on soft white", swatch: ["#0f2d53", "#f4f6f9"] },
+    { id: "classic", label: "Classic", hint: "Blue on soft white", swatch: ["#1d6ef5", "#f5f7fb"] },
     { id: "mono", label: "Mono", hint: "Black & white", swatch: ["#141414", "#f6f6f6"] },
     { id: "midnight", label: "Midnight", hint: "Dark professional", swatch: ["#0d1118", "#3b82f6"] },
     { id: "graphite", label: "Graphite", hint: "Charcoal & gray", swatch: ["#242a34", "#eceff3"] },

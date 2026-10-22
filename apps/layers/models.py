@@ -7,13 +7,12 @@ from django.utils import timezone
 
 
 class LayerInfo(models.Model):
-    """Metadata for a shapefile that has been imported into its own PostGIS table.
+    """Metadata for a shapefile imported into its own PostGIS table.
 
-    The actual geographic features live in a dynamically created table
-    (``table_name``) rather than in a Django model, since every uploaded
-    shapefile has its own arbitrary attribute schema. Martin discovers that
-    table directly from PostGIS and serves it as vector tiles; this row only
-    tracks ownership, styling and sharing.
+    Features live in ``schema_name.table_name`` (not a Django model) because
+    each shapefile has its own attribute schema. Martin serves every table via
+    ``layers_data.geolayers_tile(?layer=…)``. This row tracks ownership, style,
+    labels and sharing.
     """
 
     class GeometryType(models.TextChoices):
@@ -88,9 +87,11 @@ class LayerShareLink(models.Model):
     """A revocable public link that serves a layer's vector tiles externally.
 
     Unlike the owner/shared-user model above, anyone with the link's token can
-    fetch tiles through ``serve_shared_tile`` (no account required) until it
-    expires or is blocked — so tiles are proxied through that view rather than
-    handed out as a raw Martin URL, which could never be revoked.
+    fetch tiles through ``/x/<token>/{z}/{x}/{y}.pbf`` (no account required)
+    until it expires or is blocked. The same token also serves
+    ``/x/<token>/style.json`` — a Mapbox Style Spec built from this layer's
+    current ``style`` / ``label_config`` — so integrating MapLibre/Mapbox
+    clients can match GeoLayers styling without a separate credential.
 
     ``expires_at`` may be null for links that never expire (still revocable).
     """

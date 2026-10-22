@@ -1,17 +1,21 @@
-"""Django fallback for share-link tiles: ``/x/<token>/<z>/<x>/<y>.pbf``.
+"""Share-link tile proxy + public style document.
 
-In Docker, Nginx (geo-infra) serves this path itself: it validates the token via
-``tile_auth.validate_tile_request`` and proxies straight to Martin, so this view
-never runs. It stays for running the app without Nginx (``manage.py runserver``),
-and uses the same checks and usage logging.
+* ``/x/<token>/<z>/<x>/<y>.pbf`` — tile fallback when Nginx is not in front.
+  In Docker, Nginx (geo-infra) validates the token and proxies to Martin itself.
+* ``/x/<token>/style.json`` — Mapbox Style Spec for the same share token. Always
+  served by Django (Nginx only special-cases ``.pbf``). Integrating modules load
+  this to apply the layer's GeoLayers style automatically.
 """
+import json
 import urllib.error
 import urllib.request
 from urllib.parse import urlencode
 
 from django.conf import settings
 from django.http import HttpResponse
+from django.views.decorators.http import require_GET
 
+from .share_style import build_share_style
 from .tile_auth import SHARE_DENY_MESSAGE, SHARE_DENY_STATUS, check_share_link, record_share_link_usage
 
 
@@ -23,10 +27,16 @@ def _cors(response):
     return response
 
 
+def _share_deny_response(deny: str) -> HttpResponse:
+    return _cors(
+        HttpResponse(SHARE_DENY_MESSAGE[deny], status=SHARE_DENY_STATUS[deny], content_type="text/plain")
+    )
+
+
 def serve_shared_tile(request, token, z, x, y):
     link, deny = check_share_link(token)
     if deny:
-        return _cors(HttpResponse(SHARE_DENY_MESSAGE[deny], status=SHARE_DENY_STATUS[deny], content_type="text/plain"))
+        return _share_deny_response(deny)
 
     record_share_link_usage(link)
     upstream_url = (
@@ -46,5 +56,27 @@ def serve_shared_tile(request, token, z, x, y):
         return _cors(HttpResponse("Tile server unreachable.", status=502, content_type="text/plain"))
 
     response = HttpResponse(tile_bytes, content_type=content_type, status=upstream_status)
+    response["Cache-Control"] = "public, max-age=60"
+    return _cors(response)
+
+
+@require_GET
+def serve_shared_style(request, token):
+    """Public Mapbox Style Spec for a share token (same auth rules as tiles)."""
+    link, deny = check_share_link(token)
+    if deny:
+        return _share_deny_response(deny)
+
+    tiles_url = request.build_absolute_uri(f"/x/{link.token}/{{z}}/{{x}}/{{y}}.pbf")
+    # Django percent-encodes ``{`` / ``}`` in build_absolute_uri; MapLibre needs literal braces.
+    tiles_url = tiles_url.replace("%7Bz%7D", "{z}").replace("%7Bx%7D", "{x}").replace("%7By%7D", "{y}")
+    tiles_url = tiles_url.replace("%7bz%7d", "{z}").replace("%7bx%7d", "{x}").replace("%7by%7d", "{y}")
+
+    doc = build_share_style(layer=link.layer, tiles_url=tiles_url)
+    response = HttpResponse(
+        json.dumps(doc, separators=(",", ":")),
+        content_type="application/json",
+    )
+    # Short TTL so style edits in GeoLayers show up for external clients quickly.
     response["Cache-Control"] = "public, max-age=60"
     return _cors(response)

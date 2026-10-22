@@ -12,6 +12,13 @@
 
   <div id="builder-panel" class="map-builder">
     <aside class="map-sidebar">
+      <a href="{% url 'core:map_list' %}" class="builder-back">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M15 6 9 12l6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Back to Maps</span>
+      </a>
+
       <div class="builder-block">
         <label class="builder-label" for="map-name-input">Map name</label>
         <div class="name-edit-row">
@@ -56,6 +63,10 @@
         </div>
         <div id="available-layers" class="builder-layer-list"></div>
       </section>
+
+      <div class="builder-chrome">
+        {% include "includes/user_chrome.html" %}
+      </div>
     </aside>
     <div id="map-canvas"></div>
   </div>

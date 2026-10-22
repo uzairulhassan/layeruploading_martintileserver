@@ -18,6 +18,25 @@
     saveBtn.disabled = !ready;
   }
 
+  function bindPasswordToggles() {
+    document.querySelectorAll("[data-password-toggle]").forEach((btn) => {
+      const field = btn.closest(".password-field");
+      const input = field?.querySelector("input");
+      if (!input) return;
+      const showIcon = btn.querySelector(".password-toggle-show");
+      const hideIcon = btn.querySelector(".password-toggle-hide");
+
+      btn.addEventListener("click", () => {
+        const showing = input.type === "text";
+        input.type = showing ? "password" : "text";
+        btn.setAttribute("aria-label", showing ? "Show password" : "Hide password");
+        btn.setAttribute("title", showing ? "Show password" : "Hide password");
+        showIcon?.classList.toggle("hidden", !showing);
+        hideIcon?.classList.toggle("hidden", showing);
+      });
+    });
+  }
+
   currentEl.addEventListener("input", updateSaveState);
 
   form?.addEventListener("submit", async (event) => {
@@ -39,6 +58,15 @@
         throw new Error(Toast.fromApiBody(body, "Could not update password."));
       }
       form.reset();
+      form.querySelectorAll(".password-field input").forEach((input) => {
+        input.type = "password";
+      });
+      form.querySelectorAll("[data-password-toggle]").forEach((btn) => {
+        btn.setAttribute("aria-label", "Show password");
+        btn.setAttribute("title", "Show password");
+        btn.querySelector(".password-toggle-show")?.classList.remove("hidden");
+        btn.querySelector(".password-toggle-hide")?.classList.add("hidden");
+      });
       newEl.dispatchEvent(new Event("input"));
       confirmEl.dispatchEvent(new Event("input"));
       Toast.success("Password updated successfully.");
@@ -49,5 +77,6 @@
     }
   });
 
+  bindPasswordToggles();
   updateSaveState();
 })();

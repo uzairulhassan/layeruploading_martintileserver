@@ -1,9 +1,22 @@
 let CURRENT_MAPS = [];
 let SELECTED_SHARE_USER = null;
 let MAP_FILTER = "all";
+let MAP_SEARCH = "";
+
+const MAP_ICONS = {
+  map: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5 9 4.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 4.5v13M15 6.5v13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  open: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14 5h5v5" stroke="currentColor" stroke-width="1.7"/><path d="M10 14 19 5" stroke="currentColor" stroke-width="1.7"/><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" stroke="currentColor" stroke-width="1.7"/></svg>',
+  share: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="18" cy="5" r="2.4" stroke="currentColor" stroke-width="1.7"/><circle cx="6" cy="12" r="2.4" stroke="currentColor" stroke-width="1.7"/><circle cx="18" cy="19" r="2.4" stroke="currentColor" stroke-width="1.7"/><path d="M8.4 13.2l7.2 4.1M15.6 6.7l-7.2 4.1" stroke="currentColor" stroke-width="1.7"/></svg>',
+  delete: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14" stroke="currentColor" stroke-width="1.7"/><path d="M9 7V5h6v2" stroke="currentColor" stroke-width="1.7"/><path d="M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.7"/></svg>',
+  access: '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="2.6" stroke="currentColor" stroke-width="1.6"/><circle cx="16" cy="10.5" r="2.2" stroke="currentColor" stroke-width="1.6"/><path d="M4.8 18c1.1-2.3 2.9-3.5 5-3.5 1.2 0 2.2.3 3.1.9M13.8 15.8c1.5-.5 3-.3 4.4 1.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+};
 
 function findMap(id) {
   return CURRENT_MAPS.find((m) => String(m.id) === String(id));
+}
+
+function permissionLabel(permission) {
+  return String(permission || "").replace(/_/g, " ");
 }
 
 async function loadMaps() {
@@ -23,13 +36,17 @@ async function loadMaps() {
 }
 
 function filteredMaps() {
+  let maps = CURRENT_MAPS;
   if (MAP_FILTER === "owned") {
-    return CURRENT_MAPS.filter((map) => map.my_permission === "owner");
+    maps = maps.filter((map) => map.my_permission === "owner");
+  } else if (MAP_FILTER === "shared") {
+    maps = maps.filter((map) => map.my_permission !== "owner");
   }
-  if (MAP_FILTER === "shared") {
-    return CURRENT_MAPS.filter((map) => map.my_permission !== "owner");
+  const q = MAP_SEARCH.trim().toLowerCase();
+  if (q) {
+    maps = maps.filter((map) => String(map.name || "").toLowerCase().includes(q));
   }
-  return CURRENT_MAPS;
+  return maps;
 }
 
 function ownerLabel(map) {
@@ -47,26 +64,17 @@ function emptyStateMessage() {
   return { title: "No maps yet", body: "Create one to overlay your layers." };
 }
 
-function actionIcon(name) {
-  const icons = {
-    open: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5"/><path d="M10 14L19 5"/><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>',
-    share: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.4 13.2l7.2 4.1M15.6 6.7l-7.2 4.1"/></svg>',
-    delete: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14"/><path d="M9 7V5h6v2"/><path d="M8 7l1 12h6l1-12"/></svg>',
-  };
-  return icons[name] || "";
-}
-
 function actionButton(action, id, label, danger = false) {
   return `
     <button
       type="button"
-      class="row-action${danger ? " is-danger" : ""}"
+      class="action-btn${danger ? " is-danger" : " is-accent"}"
       data-action="${action}"
       data-id="${id}"
       title="${label}"
       aria-label="${label}"
     >
-      ${actionIcon(action)}
+      ${MAP_ICONS[action] || ""}
       <span>${label}</span>
     </button>
   `;
@@ -74,8 +82,8 @@ function actionButton(action, id, label, danger = false) {
 
 function actionLink(href, icon, label) {
   return `
-    <a class="row-action" href="${href}" title="${label}" aria-label="${label}">
-      ${actionIcon(icon)}
+    <a class="action-btn is-accent" href="${href}" title="${label}" aria-label="${label}">
+      ${MAP_ICONS[icon] || ""}
       <span>${label}</span>
     </a>
   `;
@@ -86,21 +94,32 @@ function renderMaps() {
   const maps = filteredMaps();
   if (!maps.length) {
     const empty = emptyStateMessage();
-    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><strong>${empty.title}</strong>${empty.body}</div></td></tr>`;
+    const title = MAP_SEARCH.trim() ? "No matching maps" : empty.title;
+    const body = MAP_SEARCH.trim() ? "Try a different search term." : empty.body;
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><strong>${title}</strong>${body}</div></td></tr>`;
     return;
   }
   tbody.innerHTML = maps.map((map) => `
     <tr>
-      <td><a href="/maps/${map.id}/">${map.name}</a></td>
-      <td>${map.map_layers.length}</td>
-      <td>${ownerLabel(map)}</td>
-      <td><span class="badge">${map.my_permission}</span></td>
+      <td>
+        <a class="cell-entity cell-entity-link" href="/maps/${map.id}/">
+          <span class="cell-icon tone-blue" aria-hidden="true">${MAP_ICONS.map}</span>
+          <span class="cell-entity-name">${Auth.escapeHtml(map.name)}</span>
+        </a>
+      </td>
+      <td><span class="cell-count">${map.map_layers.length}</span></td>
+      <td>${Auth.escapeHtml(ownerLabel(map))}</td>
+      <td>
+        <span class="badge badge-access">
+          <span class="badge-icon" aria-hidden="true">${MAP_ICONS.access}</span>
+          ${Auth.escapeHtml(permissionLabel(map.my_permission))}
+        </span>
+      </td>
       <td class="table-actions">
-        <div class="row-actions">
+        <div class="action-btn-row">
           ${actionLink(`/maps/${map.id}/`, "open", "Open")}
           ${map.my_permission === "owner" ? `
             ${actionButton("share", map.id, "Share")}
-            <span class="row-actions-sep" aria-hidden="true"></span>
             ${actionButton("delete", map.id, "Delete", true)}
           ` : ""}
         </div>
@@ -127,6 +146,11 @@ document.querySelectorAll("[data-map-filter]").forEach((btn) => {
     });
     renderMaps();
   });
+});
+
+document.getElementById("maps-search")?.addEventListener("input", (event) => {
+  MAP_SEARCH = event.target.value || "";
+  renderMaps();
 });
 
 function openDeleteModal(map) {

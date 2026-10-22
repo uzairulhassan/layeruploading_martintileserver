@@ -6,7 +6,6 @@ let SELECTED_SHARE_USER = null;
 const ADDED_MAPBOX_LAYER_IDS = [];
 
 function sourceLayerName(layer) {
-  // MVT layer name inside each tile = PostGIS table name (set by layers_data.geolayers_tile)
   return layer.source_layer;
 }
 
@@ -314,7 +313,6 @@ function addMapboxLayer(mapLayer) {
 
   GL_MAP.addSource(sourceId, {
     type: "vector",
-    // xyz_url = <tiles>/geolayers_tile/{z}/{x}/{y}?layer=<table> (one Martin function source for all layers)
     tiles: [layer.xyz_url],
     minzoom: 0,
     maxzoom: 22,

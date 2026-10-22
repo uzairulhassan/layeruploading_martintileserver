@@ -81,10 +81,6 @@ const Toast = (() => {
     return show(message, "error", duration);
   }
 
-  function info(message, duration) {
-    return show(message, "info", duration);
-  }
-
   /** Persist a toast across a full-page redirect (sessionStorage). */
   function flash(message, type = "success") {
     const text = String(message || "").trim();
@@ -132,5 +128,5 @@ const Toast = (() => {
     consumeFlash();
   }
 
-  return { show, success, error, info, flash, fromApiBody, fromResponse };
+  return { show, success, error, flash, fromApiBody, fromResponse };
 })();

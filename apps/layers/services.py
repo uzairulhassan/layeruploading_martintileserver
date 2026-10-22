@@ -202,3 +202,30 @@ def import_shapefile(*, owner, name: str, description: str, uploaded_file) -> La
 def delete_layer(layer: LayerInfo):
     _drop_table(layer.schema_name, layer.table_name)
     layer.delete()
+
+
+def sample_attribute_value(layer: LayerInfo, field_name: str) -> str | None:
+    """Return one non-empty sample value from ``field_name`` for style previews.
+
+    ``field_name`` must appear in the layer's recorded ``attribute_schema`` so
+    identifiers are never taken from untrusted input alone.
+    """
+    allowed = {col.get("name") for col in (layer.attribute_schema or []) if col.get("name")}
+    if field_name not in allowed:
+        raise ValueError(f"Unknown attribute field: {field_name}")
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f'''
+            SELECT "{field_name}"::text
+            FROM "{layer.schema_name}"."{layer.table_name}"
+            WHERE "{field_name}" IS NOT NULL
+              AND btrim("{field_name}"::text) <> ''
+            LIMIT 1
+            '''
+        )
+        row = cursor.fetchone()
+    if not row or row[0] is None:
+        return None
+    text = str(row[0]).strip()
+    return text or None
