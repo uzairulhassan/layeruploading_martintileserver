@@ -1,3 +1,5 @@
+/* Map Builder: full-bleed map with floating layers panel. */
+
 let MAP_DATA = null;
 let ALL_LAYERS = [];
 let GL_MAP = null;
@@ -5,8 +7,44 @@ let MAP_ID = null;
 let SELECTED_SHARE_USER = null;
 const ADDED_MAPBOX_LAYER_IDS = [];
 
+const ICON_POINT = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="7" cy="12" r="2.1" fill="currentColor"/><circle cx="12" cy="12" r="2.1" fill="currentColor"/><circle cx="17" cy="12" r="2.1" fill="currentColor"/></svg>`;
+const ICON_LINE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 16.5 10 7.5l4 5 6-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_POLY = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 6.5h8.5L18.5 12 14 17.5H7.5L5 12 7 6.5Z" fill="currentColor" opacity="0.85"/></svg>`;
+const ICON_MENU = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="5.5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="18.5" r="1.5" fill="currentColor"/></svg>`;
+const ICON_COPY = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8.5" y="8.5" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 8.5V6.2A1.7 1.7 0 0 0 13.8 4.5H6.2A1.7 1.7 0 0 0 4.5 6.2v7.6A1.7 1.7 0 0 0 6.2 15.5H8.5" stroke="currentColor" stroke-width="1.7"/></svg>`;
+const ICON_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7.5h14M10 7.5V5.8A1.3 1.3 0 0 1 11.3 4.5h1.4A1.3 1.3 0 0 1 14 5.8V7.5M8.5 7.5v11.2A1.3 1.3 0 0 0 9.8 20h4.4a1.3 1.3 0 0 0 1.3-1.3V7.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_USERS = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3.1" stroke="currentColor" stroke-width="1.6"/><path d="M3.8 18.2c.7-2.7 2.8-4.2 5.2-4.2s4.5 1.5 5.2 4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9" r="2.4" stroke="currentColor" stroke-width="1.6"/><path d="M15.2 14.2c1.7.2 3.2 1.2 3.9 3.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+const ICON_LINK = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10.2 13.8a4.2 4.2 0 0 1 0-5.9l2.1-2.1a4.2 4.2 0 0 1 5.9 5.9l-1 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.8 10.2a4.2 4.2 0 0 1 0 5.9l-2.1 2.1a4.2 4.2 0 1 1-5.9-5.9l1-1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+
+const PERMISSION_LABELS = { owner: "Owner", edit: "Can edit", view: "View only" };
+
+function setHidden(el, hidden) {
+  if (!el) return;
+  el.classList.toggle("hidden", !!hidden);
+}
+
 function sourceLayerName(layer) {
   return layer.source_layer;
+}
+
+function geometryIcon(geomType) {
+  if (geomType === "Point" || geomType === "MultiPoint") return ICON_POINT;
+  if (geomType === "LineString" || geomType === "MultiLineString") return ICON_LINE;
+  return ICON_POLY;
+}
+
+function opacityPct(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 100;
+  return Math.round(Math.min(1, Math.max(0, n)) * 100);
+}
+
+function isReadOnly() {
+  return MAP_DATA?.my_permission === "view";
+}
+
+function isMapOwner() {
+  return MAP_DATA?.my_permission === "owner";
 }
 
 function hasUsableBounds(bounds) {
@@ -17,6 +55,94 @@ function hasUsableBounds(bounds) {
   );
 }
 
+/* -- Panel chrome -- */
+
+function setBuilderTab(tab) {
+  document.querySelectorAll("[data-builder-tab]").forEach((btn) => {
+    const active = btn.dataset.builderTab === tab;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll(".layers-tab-panel").forEach((panel) => {
+    setHidden(panel, panel.id !== `panel-${tab}`);
+  });
+}
+
+function setLayersPanelOpen(open) {
+  document.getElementById("layers-panel")?.classList.toggle("is-collapsed", !open);
+  document.getElementById("layers-fab")?.setAttribute("aria-expanded", String(open));
+}
+
+function updateLayersBadge() {
+  const badge = document.getElementById("layers-count-badge");
+  if (badge) badge.textContent = String(MAP_DATA?.map_layers?.length || 0);
+}
+
+let BASEMAP_RESTORE_TOKEN = 0;
+
+function applyBasemapStyle(styleUrl) {
+  const select = document.getElementById("basemap-select");
+  if (select) select.value = styleUrl;
+  if (!GL_MAP) return;
+
+  // setStyle wipes custom sources/layers. Old IDs are invalid after the swap.
+  const token = ++BASEMAP_RESTORE_TOKEN;
+  ADDED_MAPBOX_LAYER_IDS.length = 0;
+  GL_MAP.setStyle(styleUrl);
+
+  const restore = () => {
+    if (token !== BASEMAP_RESTORE_TOKEN || !GL_MAP || !MAP_DATA) return;
+    if (!GL_MAP.isStyleLoaded()) return;
+    renderMapLayers();
+  };
+
+  GL_MAP.once("style.load", () => {
+    // Restore immediately, then again on idle in case the first pass raced the style swap.
+    requestAnimationFrame(restore);
+    GL_MAP.once("idle", restore);
+  });
+}
+
+function closeOpenLayerMenus(except = null) {
+  document.querySelectorAll(".layer-menu-dropdown").forEach((menu) => {
+    if (menu === except) return;
+    setHidden(menu, true);
+    menu.closest(".layer-menu")?.querySelector("[data-layer-menu]")?.setAttribute("aria-expanded", "false");
+  });
+}
+
+function bindBuilderChrome() {
+  document.querySelectorAll("[data-builder-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => setBuilderTab(btn.dataset.builderTab));
+  });
+
+  document.getElementById("layers-panel-collapse")?.addEventListener("click", () => setLayersPanelOpen(false));
+  document.getElementById("layers-fab")?.addEventListener("click", () => {
+    const collapsed = document.getElementById("layers-panel")?.classList.contains("is-collapsed");
+    setLayersPanelOpen(!!collapsed);
+  });
+
+  document.getElementById("add-layer-btn")?.addEventListener("click", () => {
+    const picker = document.getElementById("add-layer-picker");
+    const open = picker?.classList.contains("hidden");
+    setHidden(picker, !open);
+    document.getElementById("add-layer-btn")?.classList.toggle("is-open", !!open);
+  });
+
+  document.getElementById("basemap-select")?.addEventListener("change", (event) => {
+    applyBasemapStyle(event.target.value);
+  });
+  document.getElementById("save-map-btn")?.addEventListener("click", saveMapMeta);
+  document.getElementById("share-map-btn")?.addEventListener("click", openShareModal);
+  document.getElementById("edit-map-name-btn")?.addEventListener("click", toggleMapNameEditing);
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".layer-menu")) closeOpenLayerMenus();
+  });
+}
+
+/* -- Init / load -- */
+
 async function init() {
   const root = document.getElementById("builder-root");
   mapboxgl.accessToken = root.dataset.mapboxToken || "";
@@ -25,6 +151,8 @@ async function init() {
     console.error("Map builder requires a map id.");
     return;
   }
+  bindBuilderChrome();
+  bindShareModal();
   await loadMap();
 }
 
@@ -44,32 +172,28 @@ function toggleMapNameEditing() {
 async function loadMap() {
   const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/`);
   if (!res.ok) {
-    document.getElementById("builder-panel").innerHTML = `<div class="builder-error"><p class="muted">Map not found or access denied.</p></div>`;
+    document.getElementById("builder-panel").innerHTML =
+      `<div class="builder-error"><p class="muted">Map not found or access denied.</p></div>`;
     return;
   }
   MAP_DATA = await res.json();
 
   document.getElementById("map-name-input").value = MAP_DATA.name;
   document.getElementById("basemap-select").value = MAP_DATA.basemap_style;
+  updateLayersBadge();
 
-  const readOnly = MAP_DATA.my_permission === "view";
-  const permissionLabels = { owner: "Owner", edit: "Can edit", view: "View only" };
+  const readOnly = isReadOnly();
   const permissionValue = document.getElementById("permission-value");
   if (permissionValue) {
     permissionValue.textContent =
-      permissionLabels[MAP_DATA.my_permission] || MAP_DATA.my_permission || "—";
+      PERMISSION_LABELS[MAP_DATA.my_permission] || MAP_DATA.my_permission || "-";
   }
-  document.getElementById("save-map-btn").classList.toggle("hidden", readOnly);
-  document.getElementById("share-map-btn").classList.toggle("hidden", MAP_DATA.my_permission !== "owner");
+  setHidden(document.getElementById("save-map-btn"), readOnly);
+  setHidden(document.getElementById("share-map-btn"), !isMapOwner());
+  setHidden(document.getElementById("edit-map-name-btn"), readOnly);
+  setHidden(document.getElementById("add-layer-btn"), readOnly);
   document.getElementById("map-name-input").disabled = readOnly;
   document.getElementById("basemap-select").disabled = readOnly;
-  const editNameBtn = document.getElementById("edit-map-name-btn");
-  if (editNameBtn) {
-    editNameBtn.classList.toggle("hidden", readOnly);
-    editNameBtn.onclick = () => toggleMapNameEditing();
-  }
-  document.getElementById("available-layers-section")?.classList.toggle("hidden", readOnly);
-  document.getElementById("available-layers").classList.toggle("hidden", readOnly);
 
   if (!GL_MAP) {
     GL_MAP = new mapboxgl.Map({
@@ -78,11 +202,10 @@ async function loadMap() {
       center: [MAP_DATA.center_lng, MAP_DATA.center_lat],
       zoom: MAP_DATA.zoom,
     });
-    GL_MAP.addControl(new mapboxgl.NavigationControl(), "top-right");
+    GL_MAP.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "top-right");
+    GL_MAP.addControl(new mapboxgl.ScaleControl({ maxWidth: 120 }), "bottom-left");
     GL_MAP.on("load", () => {
       renderMapLayers();
-      // Always frame layer extents when the map still has the create defaults,
-      // or when layers exist but the saved view is empty ocean (0,0).
       if (shouldAutoFitOnLoad()) fitMapToLayers({ animate: true });
     });
   } else {
@@ -91,51 +214,84 @@ async function loadMap() {
 
   renderActiveLayers();
   if (!readOnly) await loadAvailableLayers();
-
-  document.getElementById("save-map-btn").onclick = saveMapMeta;
-  document.getElementById("share-map-btn").onclick = () => openShareModal();
-  document.getElementById("basemap-select").onchange = (event) => {
-    GL_MAP.setStyle(event.target.value);
-    GL_MAP.once("style.load", renderMapLayers);
-  };
 }
+
+/* -- Layer list UI -- */
 
 function renderActiveLayers() {
   const container = document.getElementById("active-layers");
   const layers = [...MAP_DATA.map_layers].sort((a, b) => b.order - a.order);
-  const readOnly = MAP_DATA.my_permission === "view";
+  const readOnly = isReadOnly();
+  updateLayersBadge();
 
   if (!layers.length) {
-    container.innerHTML = `<p class="muted">No layers added yet.</p>`;
+    container.innerHTML = `<p class="layer-empty">No layers on this map yet. Use Add Layer to compose one.</p>`;
     return;
   }
 
-  container.innerHTML = layers.map((ml) => `
-    <div class="layer-row" data-map-layer-id="${ml.id}">
-      <input type="checkbox" data-toggle-visible ${ml.visible ? "checked" : ""} ${readOnly ? "disabled" : ""}>
-      <span class="layer-name">${ml.layer_detail.name}</span>
-      <input type="range" min="0" max="1" step="0.05" value="${ml.opacity}" data-opacity ${readOnly ? "disabled" : ""}>
+  const orders = layers.map((ml) => ml.order);
+  const maxOrder = Math.max(...orders);
+  const minOrder = Math.min(...orders);
+
+  container.innerHTML = layers.map((ml) => {
+    const pct = opacityPct(ml.opacity);
+    const name = Auth.escapeHtml(ml.layer_detail.name);
+    const geom = ml.layer_detail.geometry_type || "";
+    const canBringForward = ml.order < maxOrder;
+    const canSendBack = ml.order > minOrder;
+    return `
+    <div class="layer-control-row${!ml.visible ? " is-off" : ""}" data-map-layer-id="${ml.id}" style="--opacity-pct:${pct}%">
+      <input class="layer-check" type="checkbox" data-toggle-visible ${ml.visible ? "checked" : ""} ${readOnly ? "disabled" : ""} aria-label="Toggle ${name}">
+      <span class="layer-type-icon" title="${Auth.escapeHtml(geom || "Layer")}">${geometryIcon(geom)}</span>
+      <span class="layer-name" title="${name}">${name}</span>
+      <span class="layer-opacity-pct" data-opacity-label>${pct}%</span>
       ${!readOnly ? `
-        <button class="btn btn-sm" data-move="up" title="Bring forward">↑</button>
-        <button class="btn btn-sm" data-move="down" title="Send back">↓</button>
-        <button class="btn btn-sm btn-danger" data-remove title="Remove from map">✕</button>
-      ` : ""}
-    </div>
-  `).join("");
+      <div class="layer-menu">
+        <button type="button" class="layer-menu-btn" data-layer-menu aria-haspopup="true" aria-expanded="false" title="Layer options" aria-label="Layer options">
+          ${ICON_MENU}
+        </button>
+        <div class="layer-menu-dropdown hidden" role="menu">
+          ${canBringForward ? `<button type="button" role="menuitem" data-move="up">Bring forward</button>` : ""}
+          ${canSendBack ? `<button type="button" role="menuitem" data-move="down">Send back</button>` : ""}
+          <button type="button" role="menuitem" class="is-danger" data-remove>Remove</button>
+        </div>
+      </div>
+      ` : `<span class="layer-menu" aria-hidden="true"></span>`}
+      <input class="layer-opacity-slider" type="range" min="0" max="1" step="0.05" value="${ml.opacity}" data-opacity ${readOnly ? "disabled" : ""} aria-label="Opacity for ${name}">
+    </div>`;
+  }).join("");
 
   container.querySelectorAll("[data-map-layer-id]").forEach((row) => {
     const mapLayerId = row.dataset.mapLayerId;
     row.querySelector("[data-toggle-visible]").addEventListener("change", (e) => {
+      row.classList.toggle("is-off", !e.target.checked);
       updateMapLayer(mapLayerId, { visible: e.target.checked });
     });
+
     const opacityInput = row.querySelector("[data-opacity]");
+    const opacityLabel = row.querySelector("[data-opacity-label]");
     if (opacityInput) {
+      opacityInput.addEventListener("input", () => {
+        const pct = opacityPct(opacityInput.value);
+        row.style.setProperty("--opacity-pct", `${pct}%`);
+        if (opacityLabel) opacityLabel.textContent = `${pct}%`;
+      });
       opacityInput.addEventListener("change", (e) => {
         updateMapLayer(mapLayerId, { opacity: parseFloat(e.target.value) });
       });
     }
-    const removeBtn = row.querySelector("[data-remove]");
-    if (removeBtn) removeBtn.addEventListener("click", () => removeMapLayer(mapLayerId));
+
+    const menuBtn = row.querySelector("[data-layer-menu]");
+    const menu = row.querySelector(".layer-menu-dropdown");
+    menuBtn?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const willOpen = menu?.classList.contains("hidden");
+      closeOpenLayerMenus(willOpen ? menu : null);
+      if (!menu) return;
+      setHidden(menu, !willOpen);
+      menuBtn.setAttribute("aria-expanded", String(!!willOpen));
+    });
+    row.querySelector("[data-remove]")?.addEventListener("click", () => removeMapLayer(mapLayerId));
     row.querySelectorAll("[data-move]").forEach((btn) => {
       btn.addEventListener("click", () => moveLayer(mapLayerId, btn.dataset.move));
     });
@@ -151,18 +307,20 @@ async function loadAvailableLayers() {
 
 function renderAvailableLayers() {
   const container = document.getElementById("available-layers");
+  if (!container) return;
   const onMapIds = new Set(MAP_DATA.map_layers.map((ml) => ml.layer_detail.id));
   const remaining = ALL_LAYERS.filter((l) => !onMapIds.has(l.id));
 
   if (!remaining.length) {
-    container.innerHTML = `<p class="muted">All your layers are already on this map.</p>`;
+    container.innerHTML = `<p class="layer-empty">All your layers are already on this map.</p>`;
     return;
   }
 
   container.innerHTML = remaining.map((l) => `
-    <div class="layer-row">
-      <span class="layer-name">${l.name}</span>
-      <button class="btn btn-sm" data-add-layer="${l.id}">Add</button>
+    <div class="add-layer-item">
+      <span class="layer-type-icon">${geometryIcon(l.geometry_type || "")}</span>
+      <span class="layer-name" title="${Auth.escapeHtml(l.name)}">${Auth.escapeHtml(l.name)}</span>
+      <button type="button" class="btn btn-sm btn-primary" data-add-layer="${l.id}">Add</button>
     </div>
   `).join("");
 
@@ -170,6 +328,8 @@ function renderAvailableLayers() {
     btn.addEventListener("click", () => addLayerToMap(btn.dataset.addLayer));
   });
 }
+
+/* -- Layer CRUD / map rendering -- */
 
 async function addLayerToMap(layerId) {
   const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/`, {
@@ -182,7 +342,6 @@ async function addLayerToMap(layerId) {
     return;
   }
   await refreshAfterLayerChange();
-  // Fit immediately, then once more after the style/sources settle.
   fitMapToLayers({ preferLayerId: layerId });
   window.setTimeout(() => fitMapToLayers({ preferLayerId: layerId, animate: true }), 400);
 }
@@ -190,6 +349,34 @@ async function addLayerToMap(layerId) {
 async function removeMapLayer(mapLayerId) {
   await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "DELETE" });
   await refreshAfterLayerChange();
+}
+
+async function updateMapLayer(mapLayerId, payload) {
+  await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "PATCH", body: payload });
+  await refreshAfterLayerChange();
+}
+
+async function moveLayer(mapLayerId, direction) {
+  const sorted = [...MAP_DATA.map_layers].sort((a, b) => a.order - b.order);
+  const idx = sorted.findIndex((ml) => String(ml.id) === String(mapLayerId));
+  const swapWith = direction === "up" ? idx + 1 : idx - 1;
+  if (swapWith < 0 || swapWith >= sorted.length) return;
+  [sorted[idx], sorted[swapWith]] = [sorted[swapWith], sorted[idx]];
+
+  await Auth.apiFetch(`/api/maps/${MAP_ID}/reorder/`, {
+    method: "POST",
+    body: { order: sorted.map((ml) => ml.id) },
+  });
+  await refreshAfterLayerChange();
+}
+
+async function refreshAfterLayerChange() {
+  const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/`);
+  MAP_DATA = await res.json();
+  updateLayersBadge();
+  renderActiveLayers();
+  if (!isReadOnly()) renderAvailableLayers();
+  renderMapLayers();
 }
 
 function shouldAutoFitOnLoad() {
@@ -228,58 +415,28 @@ function fitMapToLayers({ preferLayerId = null, animate = true } = {}) {
   });
   if (![minX, minY, maxX, maxY].every(Number.isFinite)) return false;
 
-  // Degenerate point extent
   if (Math.abs(minX - maxX) < 1e-9 && Math.abs(minY - maxY) < 1e-9) {
     GL_MAP.flyTo({ center: [minX, minY], zoom: 12, essential: true });
     return true;
   }
 
-  // Tiny extents still need a sensible zoom
-  const pad = 48;
   GL_MAP.fitBounds(
     [[minX, minY], [maxX, maxY]],
-    { padding: pad, maxZoom: 16, duration: animate ? 900 : 0, essential: true }
+    { padding: 48, maxZoom: 16, duration: animate ? 900 : 0, essential: true }
   );
   return true;
 }
 
-
-async function updateMapLayer(mapLayerId, payload) {
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "PATCH", body: payload });
-  await refreshAfterLayerChange();
-}
-
-async function moveLayer(mapLayerId, direction) {
-  const sorted = [...MAP_DATA.map_layers].sort((a, b) => a.order - b.order);
-  const idx = sorted.findIndex((ml) => String(ml.id) === String(mapLayerId));
-  const swapWith = direction === "up" ? idx + 1 : idx - 1;
-  if (swapWith < 0 || swapWith >= sorted.length) return;
-  [sorted[idx], sorted[swapWith]] = [sorted[swapWith], sorted[idx]];
-
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/reorder/`, {
-    method: "POST",
-    body: { order: sorted.map((ml) => ml.id) },
-  });
-  await refreshAfterLayerChange();
-}
-
-async function refreshAfterLayerChange() {
-  const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/`);
-  MAP_DATA = await res.json();
-  renderActiveLayers();
-  renderAvailableLayers();
-  renderMapLayers();
-}
-
 function clearMapboxLayers() {
-  while (ADDED_MAPBOX_LAYER_IDS.length) {
-    const id = ADDED_MAPBOX_LAYER_IDS.pop();
-    if (GL_MAP.getLayer(id)) GL_MAP.removeLayer(id);
+  if (!GL_MAP) {
+    ADDED_MAPBOX_LAYER_IDS.length = 0;
+    return;
   }
-  // Drop vector sources too so re-added layers always pick up fresh tile URLs
-  // (critical after delete + re-upload of the same logical dataset).
-  const style = GL_MAP.getStyle();
-  const sources = style?.sources || {};
+  const layerIds = ADDED_MAPBOX_LAYER_IDS.splice(0, ADDED_MAPBOX_LAYER_IDS.length);
+  layerIds.forEach((id) => {
+    if (GL_MAP.getLayer(id)) GL_MAP.removeLayer(id);
+  });
+  const sources = GL_MAP.getStyle()?.sources || {};
   Object.keys(sources).forEach((sourceId) => {
     if (sourceId.startsWith("src-") && GL_MAP.getSource(sourceId)) {
       GL_MAP.removeSource(sourceId);
@@ -288,15 +445,17 @@ function clearMapboxLayers() {
 }
 
 function renderMapLayers() {
-  if (!GL_MAP) return;
+  if (!GL_MAP || !MAP_DATA) return;
   if (!GL_MAP.isStyleLoaded()) {
-    GL_MAP.once("style.load", () => renderMapLayers());
+    GL_MAP.once("style.load", () => {
+      GL_MAP.once("idle", renderMapLayers);
+    });
     return;
   }
   clearMapboxLayers();
-
-  const sorted = [...MAP_DATA.map_layers].sort((a, b) => a.order - b.order);
-  sorted.forEach((ml) => addMapboxLayer(ml));
+  [...MAP_DATA.map_layers]
+    .sort((a, b) => a.order - b.order)
+    .forEach((ml) => addMapboxLayer(ml));
 }
 
 function addMapboxLayer(mapLayer) {
@@ -307,9 +466,7 @@ function addMapboxLayer(mapLayer) {
   const tableName = sourceLayerName(layer);
   if (!tableName) return;
 
-  if (GL_MAP.getSource(sourceId)) {
-    GL_MAP.removeSource(sourceId);
-  }
+  if (GL_MAP.getSource(sourceId)) GL_MAP.removeSource(sourceId);
 
   GL_MAP.addSource(sourceId, {
     type: "vector",
@@ -349,7 +506,6 @@ function addMapboxLayer(mapLayer) {
     });
     ADDED_MAPBOX_LAYER_IDS.push(id);
   } else {
-    // Polygon / MultiPolygon / Geometry fallback — fill + outline covers most cases
     const id = `layer-${mapLayer.id}-fill`;
     const outlineId = `layer-${mapLayer.id}-outline`;
     GL_MAP.addLayer({
@@ -370,7 +526,6 @@ function addMapboxLayer(mapLayer) {
     });
     ADDED_MAPBOX_LAYER_IDS.push(id, outlineId);
 
-    // If type is unknown Geometry, also add a line layer so road networks still show
     if (geomType === "Geometry" || !geomType) {
       const lineId = `layer-${mapLayer.id}-line-fallback`;
       GL_MAP.addLayer({
@@ -421,30 +576,22 @@ async function saveMapMeta() {
   setTimeout(() => { btn.textContent = original; }, 1200);
 }
 
-// ---- Share modal (people + Map URL) ----
-const ICON_COPY = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8.5" y="8.5" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 8.5V6.2A1.7 1.7 0 0 0 13.8 4.5H6.2A1.7 1.7 0 0 0 4.5 6.2v7.6A1.7 1.7 0 0 0 6.2 15.5H8.5" stroke="currentColor" stroke-width="1.7"/></svg>`;
-const ICON_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7.5h14M10 7.5V5.8A1.3 1.3 0 0 1 11.3 4.5h1.4A1.3 1.3 0 0 1 14 5.8V7.5M8.5 7.5v11.2A1.3 1.3 0 0 0 9.8 20h4.4a1.3 1.3 0 0 0 1.3-1.3V7.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const ICON_USERS = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3.1" stroke="currentColor" stroke-width="1.6"/><path d="M3.8 18.2c.7-2.7 2.8-4.2 5.2-4.2s4.5 1.5 5.2 4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9" r="2.4" stroke="currentColor" stroke-width="1.6"/><path d="M15.2 14.2c1.7.2 3.2 1.2 3.9 3.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
-const ICON_LINK = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10.2 13.8a4.2 4.2 0 0 1 0-5.9l2.1-2.1a4.2 4.2 0 0 1 5.9 5.9l-1 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.8 10.2a4.2 4.2 0 0 1 0 5.9l-2.1 2.1a4.2 4.2 0 1 1-5.9-5.9l1-1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
-
-function isMapOwner() {
-  return MAP_DATA?.my_permission === "owner";
-}
+/* -- Share modal -- */
 
 function setShareTab(tab) {
+  const isExternal = tab === "external";
   const peopleTab = document.getElementById("share-tab-people");
   const externalTab = document.getElementById("share-tab-external");
   const peoplePanel = document.getElementById("share-panel-people");
   const externalPanel = document.getElementById("share-panel-external");
-  const isExternal = tab === "external";
+
   peopleTab.classList.toggle("is-active", !isExternal);
   externalTab.classList.toggle("is-active", isExternal);
   peopleTab.setAttribute("aria-selected", String(!isExternal));
   externalTab.setAttribute("aria-selected", String(isExternal));
   peoplePanel.classList.toggle("is-active", !isExternal);
   externalPanel.classList.toggle("is-active", isExternal);
-  peoplePanel.hidden = isExternal;
-  externalPanel.hidden = !isExternal;
+
   if (isExternal) {
     externalPanel.classList.add("is-entering");
     window.setTimeout(() => externalPanel.classList.remove("is-entering"), 280);
@@ -459,10 +606,10 @@ function openShareModal() {
   SELECTED_SHARE_USER = null;
 
   const owner = isMapOwner();
-  document.getElementById("share-people-owner").classList.toggle("hidden", !owner);
-  document.getElementById("share-people-viewer").classList.toggle("hidden", owner);
-  document.getElementById("external-owner-only").classList.toggle("hidden", !owner);
-  document.getElementById("map-external-viewer-note").classList.toggle("hidden", owner);
+  setHidden(document.getElementById("share-people-owner"), !owner);
+  setHidden(document.getElementById("share-people-viewer"), owner);
+  setHidden(document.getElementById("external-owner-only"), !owner);
+  setHidden(document.getElementById("map-external-viewer-note"), owner);
   document.getElementById("map-external-copy-status").textContent = "";
   document.getElementById("map-external-copy-status").classList.remove("is-visible");
   resetMapExternalCreateForm();
@@ -486,13 +633,16 @@ function renderShareList() {
     return;
   }
   list.innerHTML = shares.map((s) => `
-    <li>${Auth.escapeHtml(s.shared_with_detail.display_name)} — ${Auth.escapeHtml(s.permission)}
+    <li>${Auth.escapeHtml(s.shared_with_detail.display_name)} -  ${Auth.escapeHtml(s.permission)}
       <button type="button" class="btn btn-link" data-remove-share="${s.shared_with_detail.id}">remove</button>
     </li>
   `).join("");
   list.querySelectorAll("[data-remove-share]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      await Auth.apiFetch(`/api/maps/${MAP_ID}/unshare/`, { method: "POST", body: { user_id: btn.dataset.removeShare } });
+      await Auth.apiFetch(`/api/maps/${MAP_ID}/unshare/`, {
+        method: "POST",
+        body: { user_id: btn.dataset.removeShare },
+      });
       await refreshAfterLayerChange();
       renderShareList();
     });
@@ -500,15 +650,13 @@ function renderShareList() {
 }
 
 function getMapExternalLinkType() {
-  const selected = document.querySelector('input[name="map-external-link-type"]:checked');
-  return selected?.value || "expiring";
+  return document.querySelector('input[name="map-external-link-type"]:checked')?.value || "expiring";
 }
 
 function syncMapExternalExpiryControls() {
   const isPermanent = getMapExternalLinkType() === "permanent";
-  const expiryWrap = document.getElementById("map-external-expiry-wrap");
+  setHidden(document.getElementById("map-external-expiry-wrap"), isPermanent);
   const expiryInput = document.getElementById("map-external-expiry");
-  expiryWrap?.classList.toggle("hidden", isPermanent);
   if (expiryInput) expiryInput.disabled = isPermanent;
 }
 
@@ -521,13 +669,16 @@ function resetMapExternalCreateForm() {
     tomorrow.setDate(tomorrow.getDate() + 7);
     expiryInput.value = tomorrow.toISOString().slice(0, 10);
   }
-  document.getElementById("map-external-create-error")?.classList.add("hidden");
+  setHidden(document.getElementById("map-external-create-error"), true);
   syncMapExternalExpiryControls();
 }
 
 function formatExpiry(isoString) {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return new Date(isoString).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function formatMapExpiryLabel(link) {
@@ -543,7 +694,7 @@ function formatMapExpiryLabel(link) {
 async function loadMapShareLinks() {
   if (!isMapOwner()) return;
   const list = document.getElementById("map-external-links-list");
-  list.innerHTML = `<li class="share-empty">Loading…</li>`;
+  list.innerHTML = `<li class="share-empty">Loading...</li>`;
   const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/share-links/`);
   if (!res.ok) {
     list.innerHTML = `<li class="share-empty">Could not load share links.</li>`;
@@ -581,12 +732,10 @@ function renderMapShareLinks(links) {
           <button type="button" class="btn btn-sm btn-danger external-action-btn" data-revoke-map-link="${link.id}">${ICON_TRASH}<span>Revoke</span></button>
         </div>
       </div>
-
       <div class="external-field">
         <span class="external-field-label">Map URL</span>
         <input class="external-input" type="text" readonly value="${mapUrl}" aria-label="Map URL">
       </div>
-
       <div class="external-stats" aria-label="Usage">
         <div class="external-stat">
           <span class="external-stat-label">Layers</span>
@@ -638,91 +787,95 @@ async function copyMapShareUrl(text, btn, message) {
   }, 1800);
 }
 
-document.querySelectorAll("[data-share-tab]").forEach((tab) => {
-  tab.addEventListener("click", () => setShareTab(tab.dataset.shareTab));
-});
+function bindShareModal() {
+  document.querySelectorAll("[data-share-tab]").forEach((tab) => {
+    tab.addEventListener("click", () => setShareTab(tab.dataset.shareTab));
+  });
 
-document.querySelectorAll('input[name="map-external-link-type"]').forEach((input) => {
-  input.addEventListener("change", syncMapExternalExpiryControls);
-});
+  document.querySelectorAll('input[name="map-external-link-type"]').forEach((input) => {
+    input.addEventListener("change", syncMapExternalExpiryControls);
+  });
 
-document.getElementById("map-external-create-btn").addEventListener("click", async () => {
-  if (!isMapOwner()) return;
-  const errorBox = document.getElementById("map-external-create-error");
-  errorBox.classList.add("hidden");
+  document.getElementById("map-external-create-btn")?.addEventListener("click", async () => {
+    if (!isMapOwner()) return;
+    const errorBox = document.getElementById("map-external-create-error");
+    setHidden(errorBox, true);
 
-  const isPermanent = getMapExternalLinkType() === "permanent";
-  const expiryValue = document.getElementById("map-external-expiry").value;
-  let body = { expires_at: null };
+    const isPermanent = getMapExternalLinkType() === "permanent";
+    const expiryValue = document.getElementById("map-external-expiry").value;
+    let body = { expires_at: null };
 
-  if (!isPermanent) {
-    if (!expiryValue) {
-      errorBox.textContent = "Choose an expiry date.";
-      errorBox.classList.remove("hidden");
+    if (!isPermanent) {
+      if (!expiryValue) {
+        errorBox.textContent = "Choose an expiry date.";
+        setHidden(errorBox, false);
+        return;
+      }
+      body = { expires_at: new Date(`${expiryValue}T23:59:59`).toISOString() };
+    }
+
+    const btn = document.getElementById("map-external-create-btn");
+    btn.disabled = true;
+    try {
+      const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/share-links/`, {
+        method: "POST",
+        body,
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.expires_at?.[0] || errBody.detail || "Could not generate the link.");
+      }
+      resetMapExternalCreateForm();
+      await loadMapShareLinks();
+    } catch (err) {
+      errorBox.textContent = err.message;
+      setHidden(errorBox, false);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  let shareSearchTimeout;
+  document.getElementById("share-search")?.addEventListener("input", (event) => {
+    clearTimeout(shareSearchTimeout);
+    const query = event.target.value.trim();
+    if (!query) {
+      document.getElementById("share-results").innerHTML = "";
       return;
     }
-    body = { expires_at: new Date(`${expiryValue}T23:59:59`).toISOString() };
-  }
-
-  const btn = document.getElementById("map-external-create-btn");
-  btn.disabled = true;
-  try {
-    const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/share-links/`, {
-      method: "POST",
-      body,
-    });
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
-      throw new Error(errBody.expires_at?.[0] || errBody.detail || "Could not generate the link.");
-    }
-    resetMapExternalCreateForm();
-    await loadMapShareLinks();
-  } catch (err) {
-    errorBox.textContent = err.message;
-    errorBox.classList.remove("hidden");
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-let shareSearchTimeout;
-document.getElementById("share-search").addEventListener("input", (event) => {
-  clearTimeout(shareSearchTimeout);
-  const query = event.target.value.trim();
-  if (!query) {
-    document.getElementById("share-results").innerHTML = "";
-    return;
-  }
-  shareSearchTimeout = setTimeout(async () => {
-    const res = await Auth.apiFetch(`/api/auth/users/?search=${encodeURIComponent(query)}`);
-    const data = await res.json();
-    const results = data.results || data;
-    document.getElementById("share-results").innerHTML = results.map((u) => `
-      <div class="share-hit" data-user-id="${u.id}">${u.display_name} (${u.username})</div>
-    `).join("") || `<p class="muted">No users found.</p>`;
-    document.querySelectorAll("#share-results [data-user-id]").forEach((row) => {
-      row.addEventListener("click", () => {
-        SELECTED_SHARE_USER = results.find((u) => String(u.id) === row.dataset.userId);
-        document.getElementById("share-search").value = SELECTED_SHARE_USER.display_name;
-        document.getElementById("share-results").innerHTML = "";
-        document.getElementById("share-submit").disabled = false;
+    shareSearchTimeout = setTimeout(async () => {
+      const res = await Auth.apiFetch(`/api/auth/users/?search=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      const results = data.results || data;
+      document.getElementById("share-results").innerHTML = results.map((u) => `
+        <div class="share-hit" data-user-id="${u.id}">${u.display_name} (${u.username})</div>
+      `).join("") || `<p class="muted">No users found.</p>`;
+      document.querySelectorAll("#share-results [data-user-id]").forEach((row) => {
+        row.addEventListener("click", () => {
+          SELECTED_SHARE_USER = results.find((u) => String(u.id) === row.dataset.userId);
+          document.getElementById("share-search").value = SELECTED_SHARE_USER.display_name;
+          document.getElementById("share-results").innerHTML = "";
+          document.getElementById("share-submit").disabled = false;
+        });
       });
-    });
-  }, 250);
-});
-
-document.getElementById("share-submit").addEventListener("click", async () => {
-  if (!SELECTED_SHARE_USER || !isMapOwner()) return;
-  const permission = document.getElementById("share-permission").value;
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/share/`, {
-    method: "POST",
-    body: { shared_with: SELECTED_SHARE_USER.id, permission },
+    }, 250);
   });
-  await refreshAfterLayerChange();
-  renderShareList();
-  document.getElementById("share-submit").disabled = true;
-  SELECTED_SHARE_USER = null;
-  document.getElementById("share-search").value = "";
-});
+
+  document.getElementById("share-submit")?.addEventListener("click", async () => {
+    if (!SELECTED_SHARE_USER || !isMapOwner()) return;
+    await Auth.apiFetch(`/api/maps/${MAP_ID}/share/`, {
+      method: "POST",
+      body: {
+        shared_with: SELECTED_SHARE_USER.id,
+        permission: document.getElementById("share-permission").value,
+      },
+    });
+    await refreshAfterLayerChange();
+    renderShareList();
+    document.getElementById("share-submit").disabled = true;
+    SELECTED_SHARE_USER = null;
+    document.getElementById("share-search").value = "";
+  });
+}
 
 document.addEventListener("DOMContentLoaded", init);
