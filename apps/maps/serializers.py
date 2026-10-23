@@ -1,10 +1,12 @@
+from django.db.models import Sum
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.serializers import UserSummarySerializer
 from apps.layers.models import LayerInfo
 from apps.layers.serializers import LayerInfoSerializer
 
-from .models import MapLayer, MapProject, MapShare
+from .models import MapLayer, MapProject, MapShare, MapShareLink
 
 
 class MapLayerSerializer(serializers.ModelSerializer):
@@ -66,3 +68,63 @@ class AddMapLayerSerializer(serializers.Serializer):
 
 class ReorderMapLayersSerializer(serializers.Serializer):
     order = serializers.ListField(child=serializers.IntegerField(), allow_empty=False)
+
+
+class MapShareLinkSerializer(serializers.ModelSerializer):
+    """External Map URL payload. ``style_url`` is what the UI copies as the Map URL."""
+
+    style_url = serializers.SerializerMethodField()
+    is_expired = serializers.SerializerMethodField()
+    never_expires = serializers.SerializerMethodField()
+    total_requests = serializers.SerializerMethodField()
+    layer_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MapShareLink
+        fields = [
+            "id",
+            "map",
+            "token",
+            "style_url",
+            "layer_count",
+            "expires_at",
+            "never_expires",
+            "is_blocked",
+            "is_expired",
+            "created_at",
+            "last_used_at",
+            "total_requests",
+        ]
+        read_only_fields = ["id", "token", "is_blocked", "created_at", "last_used_at"]
+        extra_kwargs = {
+            "map": {"write_only": True},
+            "expires_at": {"required": False, "allow_null": True},
+        }
+
+    def validate_expires_at(self, value):
+        if value is None:
+            return value
+        if value <= timezone.now():
+            raise serializers.ValidationError("Expiry must be in the future.")
+        return value
+
+    def _share_base(self, obj):
+        request = self.context.get("request")
+        base = request.build_absolute_uri("/") if request else "/"
+        return f"{base.rstrip('/')}/m/{obj.token}"
+
+    def get_style_url(self, obj):
+        """Map URL — full composition Style Spec for this share token."""
+        return f"{self._share_base(obj)}/style.json"
+
+    def get_is_expired(self, obj):
+        return obj.is_expired
+
+    def get_never_expires(self, obj):
+        return obj.expires_at is None
+
+    def get_total_requests(self, obj):
+        return obj.usage.aggregate(total=Sum("request_count"))["total"] or 0
+
+    def get_layer_count(self, obj):
+        return obj.map.map_layers.count()

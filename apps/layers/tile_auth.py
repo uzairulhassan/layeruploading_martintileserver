@@ -1,14 +1,14 @@
 """Tile authorization for the shared Nginx (``auth_request``) and the dev-only Django proxy.
 
-Nginx on :8081 sends a subrequest to ``validate_tile_request`` for two kinds of tile URL:
+Nginx on :8081 sends a subrequest to ``validate_tile_request`` for these tile URLs:
 
 * ``/tiles/geolayers_tile/{z}/{x}/{y}?layer=layer_<hex>``  - the app's own map builder.
   Allowed for the layer owner, users it is shared with, and superusers. They are
   identified by the Django session cookie or a ``Bearer`` JWT.
-* ``/x/<share-token>/{z}/{x}/{y}.pbf``  - revocable, expiring public share links
-  (``LayerShareLink``). No account is needed; the token is checked on every tile.
-  The same token also unlocks ``/x/<token>/style.json`` (served by Django, not
-  this auth_request path).
+* ``/x/<token>/{z}/{x}/{y}.pbf``  - Layer URL tiles (``LayerShareLink``).
+  Companion Layer URL document: ``/x/<token>/style.json`` (Django, not auth_request).
+* ``/m/<token>/<table>/{z}/{x}/{y}.pbf``  - Map URL tiles (``MapShareLink``);
+  ``table`` must currently be on that map. Companion Map URL: ``/m/<token>/style.json``.
 
 On success Django returns 204 plus ``X-Tile-Layer: <table>``, and Nginx proxies
 to Martin with *that* table. The client's own ``?layer=`` is never trusted.
@@ -30,6 +30,13 @@ from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
+
+from apps.maps.share_auth import (
+    MAP_SHARE_TILE_RE,
+    check_map_share_link,
+    map_share_allows_table,
+    record_map_share_link_usage,
+)
 
 from .models import LayerInfo, LayerShare, LayerShareLink, LayerShareLinkUsage
 
@@ -129,6 +136,18 @@ def authorize_tile_request(request, original_uri: str) -> TileDecision:
             return TileDecision(403, deny, token_label=label)
         record_share_link_usage(link)
         return TileDecision(204, layer_table=link.layer.table_name, token_label=label)
+
+    map_share = MAP_SHARE_TILE_RE.match(parts.path)
+    if map_share:
+        link, deny = check_map_share_link(map_share.group("token"))
+        label = f"map:{str(link.pk)[:8]}" if link else "-"
+        if deny:
+            return TileDecision(403, deny, token_label=label)
+        table = map_share.group("table")
+        if not map_share_allows_table(link, table):
+            return TileDecision(403, "forbidden", token_label=label)
+        record_map_share_link_usage(link)
+        return TileDecision(204, layer_table=table, token_label=label)
 
     app_tile = APP_TILE_RE.match(parts.path)
     if not app_tile or app_tile.group("source") != settings.MARTIN_LAYER_FUNCTION:

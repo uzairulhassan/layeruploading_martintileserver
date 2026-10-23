@@ -25,6 +25,10 @@ apps/
 Upload flow: `.zip` shapefile → `ogr2ogr` → `layers_data.layer_<uuid>` →
 Martin `geolayers_tile?layer=` → Mapbox GL / external share link `/x/<token>/…`.
 
+**Map URL / Layer URL:** owners create revocable links.
+Layer URL → `/x/<token>/style.json`. Map URL → `/m/<token>/style.json`
+(full composition). Styles stay live; revoke / expiry / block apply immediately.
+
 ## Running with Docker (shared infrastructure)
 
 ```bash
@@ -45,7 +49,8 @@ Local live-reload: `docker compose up -d --build` (bind-mounts source).
 | --- | --- |
 | App | http://&lt;host&gt;:8081 |
 | Map builder tiles | http://&lt;host&gt;:8081/tiles/geolayers_tile/{z}/{x}/{y}?layer=layer_&lt;hex&gt; |
-| External share links | http://&lt;host&gt;:8081/x/&lt;token&gt;/{z}/{x}/{y}.pbf |
+| Layer URL | http://&lt;host&gt;:8081/x/&lt;token&gt;/style.json |
+| Map URL | http://&lt;host&gt;:8081/m/&lt;token&gt;/style.json |
 
 `DATABASE_URL` password must equal `GEOLAYERS_DB_PASSWORD` in `geo_infra/.env`.
 `TILE_AUTH_SHARED_SECRET` must equal `GEOLAYERS_TILE_AUTH_SHARED_SECRET` in `geo_infra/.env`.

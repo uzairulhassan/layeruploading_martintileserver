@@ -74,33 +74,98 @@
 
 <div id="share-modal" class="modal-backdrop hidden">
   <div class="modal modal-share" role="dialog" aria-labelledby="builder-share-title">
-    <div class="modal-header">
-      <h2 id="builder-share-title">Share map</h2>
-      <p class="modal-sub">Invite teammates to view or edit this map.</p>
+    <div class="modal-header modal-header-share">
+      <div>
+        <div class="modal-title-row">
+          <h2 id="builder-share-title">Share map</h2>
+        </div>
+        <p class="modal-sub">Invite teammates, or create a Map URL others can open in GeoTrak Maps.</p>
+      </div>
+      <button type="button" class="modal-dismiss" data-close-modal="share-modal" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
-    <div class="modal-body">
-      <div class="share-invite">
-        <div class="form-group">
-          <label for="share-search">Find user</label>
-          <input type="text" id="share-search" placeholder="Username or email">
-          <div id="share-results" class="share-results"></div>
+
+    <div class="modal-body modal-body-share">
+      <div class="share-tabs" role="tablist" aria-label="Share options">
+        <button type="button" class="share-tab is-active" role="tab" id="share-tab-people" aria-selected="true" aria-controls="share-panel-people" data-share-tab="people">
+          People
+        </button>
+        <button type="button" class="share-tab" role="tab" id="share-tab-external" aria-selected="false" aria-controls="share-panel-external" data-share-tab="external">
+          Map URL
+        </button>
+      </div>
+
+      <div id="share-panel-people" class="share-panel is-active" role="tabpanel" aria-labelledby="share-tab-people">
+        <div id="share-people-owner">
+          <div class="share-invite">
+            <div class="form-group">
+              <label for="share-search">Find user</label>
+              <input type="text" id="share-search" placeholder="Username or email" autocomplete="off">
+              <div id="share-results" class="share-results"></div>
+            </div>
+            <div class="form-group">
+              <label for="share-permission">Permission</label>
+              <select id="share-permission">
+                <option value="view">View only</option>
+                <option value="edit">Can edit layers &amp; layout</option>
+              </select>
+            </div>
+            <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
+          </div>
+          <div class="share-list-block">
+            <p class="share-heading">Shared with</p>
+            <ul id="share-list" class="share-list"></ul>
+          </div>
         </div>
-        <div class="form-group">
-          <label for="share-permission">Permission</label>
-          <select id="share-permission">
-            <option value="view">View only</option>
-            <option value="edit">Can edit layers &amp; layout</option>
-          </select>
+        <div id="share-people-viewer" class="share-viewer-note hidden">
+          <p>Only the map owner can share with other users.</p>
         </div>
-        <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
       </div>
-      <div class="share-list-block">
-        <p class="share-heading">Shared with</p>
-        <ul id="share-list" class="share-list"></ul>
+
+      <div id="share-panel-external" class="share-panel" role="tabpanel" aria-labelledby="share-tab-external" hidden>
+        <div id="external-owner-only">
+          <div class="external-create">
+            <div class="form-group">
+              <span class="external-choice-label">Link type</span>
+              <div class="external-choice" role="radiogroup" aria-label="Link type">
+                <label class="external-choice-option">
+                  <input type="radio" name="map-external-link-type" value="expiring" checked>
+                  <span>Expirable</span>
+                </label>
+                <label class="external-choice-option">
+                  <input type="radio" name="map-external-link-type" value="permanent">
+                  <span>No expiry</span>
+                </label>
+              </div>
+            </div>
+
+            <div id="map-external-expiry-wrap" class="form-group">
+              <label for="map-external-expiry">Expires on</label>
+              <input type="date" id="map-external-expiry">
+            </div>
+
+            <button type="button" class="btn btn-primary" id="map-external-create-btn">Generate link</button>
+            <div id="map-external-create-error" class="error-text hidden" role="alert"></div>
+          </div>
+
+          <div class="share-list-block">
+            <p class="share-heading">Active links</p>
+            <ul id="map-external-links-list" class="share-list external-links-list"></ul>
+          </div>
+        </div>
+        <div id="map-external-viewer-note" class="share-viewer-note hidden">
+          <p>Only the map owner can create or manage a Map URL.</p>
+        </div>
+
+        <p id="map-external-copy-status" class="external-toast" role="status" aria-live="polite"></p>
       </div>
-      <div class="modal-actions">
-        <button type="button" class="btn" data-close-modal="share-modal">Done</button>
-      </div>
+    </div>
+
+    <div class="modal-footer modal-footer-share">
+      <button type="button" class="btn" data-close-modal="share-modal">Close</button>
     </div>
   </div>
 </div>

@@ -157,13 +157,13 @@ class ShareLinkApiTests(TestCase):
         self.assertEqual(res.status_code, 201, res.content)
         body = res.json()
         self.assertGreaterEqual(len(body["token"]), 24)
-        self.assertEqual(body["xyz_url"], f"http://testserver/x/{body['token']}/{{z}}/{{x}}/{{y}}.pbf")
         self.assertEqual(body["style_url"], f"http://testserver/x/{body['token']}/style.json")
+        self.assertEqual(body["xyz_url"], f"http://testserver/x/{body['token']}/{{z}}/{{x}}/{{y}}.pbf")
         self.assertEqual(body["total_requests"], 0)
         self.assertIsNone(body["last_used_at"])
         self.assertFalse(body["never_expires"])
-        self.assertEqual(body["source_layer"], TABLE)
-        self.assertIn("geometry_type", body)
+        self.assertNotIn("source_layer", body)
+        self.assertNotIn("suggested_geometry", body)
 
     def test_owner_can_create_link_with_no_expiry(self):
         self.api.force_authenticate(self.owner)

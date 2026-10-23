@@ -1,9 +1,15 @@
+import secrets
 import uuid
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 from apps.layers.models import LayerInfo
+
+
+def _generate_map_share_token() -> str:
+    return secrets.token_urlsafe(24)
 
 
 class MapProject(models.Model):
@@ -71,3 +77,61 @@ class MapShare(models.Model):
 
     def __str__(self):
         return f"{self.map.name} -> {self.shared_with} ({self.permission})"
+
+
+class MapShareLink(models.Model):
+    """Revocable public Map URL for a map composition (no account required).
+
+    Primary link: ``/m/<token>/style.json`` (layers, styles, viewport — live).
+    Per-layer tiles: ``/m/<token>/<layer_table>/{z}/{x}/{y}.pbf``.
+    ``expires_at`` may be null (never expires; still revocable / blockable).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    map = models.ForeignKey(MapProject, on_delete=models.CASCADE, related_name="share_links")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="map_share_links"
+    )
+    token = models.CharField(max_length=64, unique=True, editable=False, default=_generate_map_share_token)
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Leave blank for a link that never expires (still revocable).",
+    )
+    is_blocked = models.BooleanField(default=False, help_text="Admins can block a link without deleting it.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.map.name} link ({self.token[:8]}…)"
+
+    @property
+    def is_expired(self) -> bool:
+        if self.expires_at is None:
+            return False
+        return timezone.now() >= self.expires_at
+
+    @property
+    def is_active(self) -> bool:
+        return not self.is_blocked and not self.is_expired
+
+
+class MapShareLinkUsage(models.Model):
+    """Per-day tile request counter for one map share link (one upsert per tile)."""
+
+    link = models.ForeignKey(MapShareLink, on_delete=models.CASCADE, related_name="usage")
+    date = models.DateField()
+    request_count = models.PositiveBigIntegerField(default=0)
+    last_request_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-date"]
+        constraints = [
+            models.UniqueConstraint(fields=["link", "date"], name="map_share_link_usage_unique"),
+        ]
+
+    def __str__(self):
+        return f"{self.link} {self.date}: {self.request_count}"

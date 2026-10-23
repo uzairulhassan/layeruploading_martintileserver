@@ -5,7 +5,6 @@ from rest_framework import serializers
 
 from apps.accounts.serializers import UserSummarySerializer
 
-from .geometry_hints import SUGGESTED_GEOMETRY
 from .models import LayerInfo, LayerShare, LayerShareLink
 
 
@@ -74,11 +73,10 @@ class LayerInfoSerializer(serializers.ModelSerializer):
 
 
 class LayerShareLinkSerializer(serializers.ModelSerializer):
-    xyz_url = serializers.SerializerMethodField()
+    """External Layer URL payload. ``style_url`` is what the UI copies as the Layer URL."""
+
     style_url = serializers.SerializerMethodField()
-    source_layer = serializers.SerializerMethodField()
-    geometry_type = serializers.SerializerMethodField()
-    suggested_geometry = serializers.SerializerMethodField()
+    xyz_url = serializers.SerializerMethodField()
     is_expired = serializers.SerializerMethodField()
     never_expires = serializers.SerializerMethodField()
     total_requests = serializers.SerializerMethodField()
@@ -86,10 +84,18 @@ class LayerShareLinkSerializer(serializers.ModelSerializer):
     class Meta:
         model = LayerShareLink
         fields = [
-            "id", "layer", "token", "xyz_url", "style_url",
-            "source_layer", "geometry_type", "suggested_geometry", "expires_at",
-            "never_expires", "is_blocked", "is_expired", "created_at",
-            "last_used_at", "total_requests",
+            "id",
+            "layer",
+            "token",
+            "style_url",
+            "xyz_url",
+            "expires_at",
+            "never_expires",
+            "is_blocked",
+            "is_expired",
+            "created_at",
+            "last_used_at",
+            "total_requests",
         ]
         read_only_fields = ["id", "token", "is_blocked", "created_at", "last_used_at"]
         extra_kwargs = {
@@ -109,22 +115,13 @@ class LayerShareLinkSerializer(serializers.ModelSerializer):
         base = request.build_absolute_uri("/") if request else "/"
         return f"{base.rstrip('/')}/x/{obj.token}"
 
-    def get_xyz_url(self, obj):
-        """Shareable, revocable tile URL template — proxied through serve_shared_tile, not Martin directly."""
-        return f"{self._share_base(obj)}/{{z}}/{{x}}/{{y}}.pbf"
-
     def get_style_url(self, obj):
-        """Mapbox Style Spec for this share token (same auth / expiry / revoke as tiles)."""
+        """Layer URL — Style Spec (paint/labels) for this share token."""
         return f"{self._share_base(obj)}/style.json"
 
-    def get_source_layer(self, obj):
-        return obj.layer.table_name
-
-    def get_geometry_type(self, obj):
-        return obj.layer.geometry_type
-
-    def get_suggested_geometry(self, obj):
-        return SUGGESTED_GEOMETRY.get(obj.layer.geometry_type, "line")
+    def get_xyz_url(self, obj):
+        """Raw vector tile template for the same token (advanced / GIS clients)."""
+        return f"{self._share_base(obj)}/{{z}}/{{x}}/{{y}}.pbf"
 
     def get_is_expired(self, obj):
         return obj.is_expired

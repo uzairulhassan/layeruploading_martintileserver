@@ -84,16 +84,11 @@ def _generate_share_token() -> str:
 
 
 class LayerShareLink(models.Model):
-    """A revocable public link that serves a layer's vector tiles externally.
+    """Revocable public Layer URL for one layer (no account required).
 
-    Unlike the owner/shared-user model above, anyone with the link's token can
-    fetch tiles through ``/x/<token>/{z}/{x}/{y}.pbf`` (no account required)
-    until it expires or is blocked. The same token also serves
-    ``/x/<token>/style.json`` — a Mapbox Style Spec built from this layer's
-    current ``style`` / ``label_config`` — so integrating MapLibre/Mapbox
-    clients can match GeoLayers styling without a separate credential.
-
-    ``expires_at`` may be null for links that never expire (still revocable).
+    Primary link: ``/x/<token>/style.json`` (paint + labels, live from LayerInfo).
+    Tiles for the same token: ``/x/<token>/{z}/{x}/{y}.pbf``.
+    ``expires_at`` may be null (never expires; still revocable / blockable).
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

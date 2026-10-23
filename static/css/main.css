@@ -2529,13 +2529,6 @@ th.table-actions {
   color: var(--navy-muted);
 }
 
-.external-meta-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(6.5rem, 0.65fr);
-  gap: 0.75rem 0.85rem;
-  align-items: start;
-}
-
 .external-input {
   display: block;
   width: 100%;
@@ -2558,17 +2551,6 @@ th.table-actions {
   outline: none;
   border-color: var(--navy);
   background: var(--white);
-}
-
-.external-chip-row {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  min-width: 0;
-}
-
-.external-chip-row .external-input {
-  flex: 1;
 }
 
 .external-stats {
@@ -2613,8 +2595,7 @@ th.table-actions {
   opacity: 1;
 }
 
-.external-link-actions .btn.is-copied,
-.external-chip-row .btn.is-copied {
+.external-link-actions .btn.is-copied {
   background: var(--success, #167a4e);
   border-color: var(--success, #167a4e);
   color: var(--white);
@@ -2682,7 +2663,6 @@ th.table-actions {
 
 @media (max-width: 720px) {
   .external-choice,
-  .external-meta-grid,
   .external-stats {
     grid-template-columns: 1fr;
   }

@@ -5,12 +5,13 @@ from rest_framework.response import Response
 
 from apps.layers.models import LayerInfo
 
-from .models import MapLayer, MapProject, MapShare
+from .models import MapLayer, MapProject, MapShare, MapShareLink
 from .permissions import IsMapOwnerOrSharedWithPermission
 from .serializers import (
     AddMapLayerSerializer,
     MapLayerSerializer,
     MapProjectSerializer,
+    MapShareLinkSerializer,
     MapShareSerializer,
     ReorderMapLayersSerializer,
 )
@@ -134,4 +135,42 @@ class MapProjectViewSet(viewsets.ModelViewSet):
         deleted, _ = MapShare.objects.filter(map=map_project, shared_with_id=user_id).delete()
         if not deleted:
             return Response({"detail": "Share not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["get", "post"], url_path="share-links")
+    def share_links(self, request, pk=None):
+        """List or create revocable external share links for this map."""
+        map_project = self.get_object()
+        if map_project.owner_id != request.user.id:
+            return Response(
+                {"detail": "Only the owner can manage external share links."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if request.method == "GET":
+            links = map_project.share_links.all()
+            return Response(
+                MapShareLinkSerializer(links, many=True, context=self.get_serializer_context()).data
+            )
+
+        serializer = MapShareLinkSerializer(
+            data={**request.data, "map": map_project.id},
+            context=self.get_serializer_context(),
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save(created_by=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["delete"], url_path=r"share-links/(?P<link_id>[0-9a-f-]+)")
+    def revoke_share_link(self, request, pk=None, link_id=None):
+        map_project = self.get_object()
+        if map_project.owner_id != request.user.id:
+            return Response(
+                {"detail": "Only the owner can manage external share links."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        deleted, _ = MapShareLink.objects.filter(id=link_id, map=map_project).delete()
+        if not deleted:
+            return Response({"detail": "Share link not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_204_NO_CONTENT)

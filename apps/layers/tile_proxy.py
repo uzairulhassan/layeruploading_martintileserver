@@ -1,10 +1,8 @@
-"""Share-link tile proxy + public style document.
+"""Layer URL endpoints (Django fallback when Nginx is not in front).
 
-* ``/x/<token>/<z>/<x>/<y>.pbf`` — tile fallback when Nginx is not in front.
-  In Docker, Nginx (geo-infra) validates the token and proxies to Martin itself.
-* ``/x/<token>/style.json`` — Mapbox Style Spec for the same share token. Always
-  served by Django (Nginx only special-cases ``.pbf``). Integrating modules load
-  this to apply the layer's GeoLayers style automatically.
+* ``/x/<token>/style.json`` — Layer URL (Style Spec). Always served by Django.
+* ``/x/<token>/<z>/<x>/<y>.pbf`` — tiles for the same token. In Docker, Nginx
+  auth_request + Martin handle ``.pbf``; this view is the no-Nginx fallback.
 """
 import json
 import urllib.error

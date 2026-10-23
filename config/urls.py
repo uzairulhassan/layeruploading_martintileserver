@@ -6,6 +6,7 @@ from django.views.static import serve
 
 from apps.layers.tile_auth import validate_tile_request
 from apps.layers.tile_proxy import serve_shared_style, serve_shared_tile
+from apps.maps.share_proxy import serve_shared_map_style, serve_shared_map_tile
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -13,6 +14,13 @@ urlpatterns = [
     path("x/<str:token>/style.json", serve_shared_style, name="shared_style"),
     # Behind Nginx this path is served by Nginx + Martin directly; the view is the no-Nginx fallback.
     path("x/<str:token>/<int:z>/<int:x>/<int:y>.pbf", serve_shared_tile, name="shared_tile"),
+    # Map composition share (same pattern under /m/).
+    path("m/<str:token>/style.json", serve_shared_map_style, name="shared_map_style"),
+    path(
+        "m/<str:token>/<str:table>/<int:z>/<int:x>/<int:y>.pbf",
+        serve_shared_map_tile,
+        name="shared_map_tile",
+    ),
     # Nginx auth_request target (blocked publicly by Nginx; see ../geo-infra).
     path("tiles-auth/validate/", validate_tile_request, name="tile_auth_validate"),
     path("api/auth/", include("apps.accounts.urls")),

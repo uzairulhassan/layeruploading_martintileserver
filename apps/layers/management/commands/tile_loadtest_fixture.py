@@ -70,9 +70,10 @@ class Command(BaseCommand):
                 "id serial PRIMARY KEY, name text, category integer, "
                 "geom geometry(MultiPoint, 4326))"
             )
+            # Escape %% so Django/psycopg does not treat "g % 10" as a bind placeholder.
             cursor.execute(
                 f'INSERT INTO "{schema}"."{table}" (name, category, geom) '
-                "SELECT 'pt ' || g, g % 10, "
+                "SELECT 'pt ' || g, g %% 10, "
                 "ST_Multi(ST_SetSRID(ST_MakePoint(%s + random() * %s, %s + random() * %s), 4326)) "
                 "FROM generate_series(1, %s) AS g",
                 [minx, maxx - minx, miny, maxy - miny, opts["points"]],

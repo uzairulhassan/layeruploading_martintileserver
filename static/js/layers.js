@@ -386,7 +386,7 @@ document.getElementById("style-form").addEventListener("submit", async (event) =
 });
 document.getElementById("label-field")?.addEventListener("change", refreshStyleLabelSample);
 
-// ---- Share (people + External Share) ----
+// ---- Share (people + Layer URL) ----
 let SHARE_COPY_RESET = null;
 
 function setShareTab(tab) {
@@ -471,7 +471,7 @@ function openShareModal(layer) {
   Auth.openModal("share-modal");
 }
 
-// ---- External share links (optional expiry, revocable) ----
+// ---- Layer URL links (optional expiry, revocable) ----
 async function loadShareLinks(layerId) {
   const list = document.getElementById("external-links-list");
   list.innerHTML = `<li class="share-empty">Loading…</li>`;
@@ -487,18 +487,6 @@ async function loadShareLinks(layerId) {
 function formatExpiry(isoString) {
   const date = new Date(isoString);
   return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
-function simplifyGeometryLabel(geometryType, suggestedGeometry) {
-  const suggested = String(suggestedGeometry || "").toLowerCase();
-  if (suggested === "line" || suggested === "fill" || suggested === "circle") {
-    return suggested;
-  }
-  const raw = String(geometryType || "").toLowerCase();
-  if (raw.includes("line")) return "line";
-  if (raw.includes("polygon")) return "fill";
-  if (raw.includes("point")) return "circle";
-  return raw || "—";
 }
 
 const ICON_COPY = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8.5" y="8.5" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 8.5V6.2A1.7 1.7 0 0 0 13.8 4.5H6.2A1.7 1.7 0 0 0 4.5 6.2v7.6A1.7 1.7 0 0 0 6.2 15.5H8.5" stroke="currentColor" stroke-width="1.7"/></svg>`;
@@ -529,11 +517,9 @@ function renderShareLinks(layerId, links) {
     return;
   }
   list.innerHTML = links.map((link) => {
-    const geometryLabel = simplifyGeometryLabel(link.geometry_type, link.suggested_geometry);
     const requests = Number(link.total_requests || 0).toLocaleString();
     const lastUsed = link.last_used_at ? formatExpiry(link.last_used_at) : "Never";
-    const tileUrl = Auth.escapeHtml(link.xyz_url);
-    const sourceLayer = Auth.escapeHtml(link.source_layer);
+    const layerUrl = Auth.escapeHtml(link.style_url);
     return `
     <li class="external-link-card">
       <div class="external-link-top">
@@ -542,33 +528,19 @@ function renderShareLinks(layerId, links) {
           ${link.is_blocked ? `<span class="external-pill external-pill-blocked"><span class="external-pill-dot" aria-hidden="true"></span>Blocked</span>` : ""}
         </div>
         <div class="external-link-actions">
-          <button type="button" class="btn btn-sm external-action-btn" data-copy-link="${tileUrl}">${ICON_COPY}<span>Copy URL</span></button>
+          <button type="button" class="btn btn-sm external-action-btn" data-copy-link="${layerUrl}">${ICON_COPY}<span>Copy Layer URL</span></button>
           <button type="button" class="btn btn-sm btn-danger external-action-btn" data-revoke-link="${link.id}">${ICON_TRASH}<span>Revoke</span></button>
         </div>
       </div>
 
       <div class="external-field">
-        <span class="external-field-label">Tile URL</span>
-        <input class="external-input" type="text" readonly value="${tileUrl}" aria-label="Tile URL">
-      </div>
-
-      <div class="external-meta-grid">
-        <div class="external-field">
-          <span class="external-field-label">Source layer</span>
-          <div class="external-chip-row">
-            <input class="external-input" type="text" readonly value="${sourceLayer}" aria-label="Source layer">
-            <button type="button" class="btn btn-sm" data-copy-source="${sourceLayer}">Copy</button>
-          </div>
-        </div>
-        <div class="external-field">
-          <span class="external-field-label">Geometry</span>
-          <input class="external-input" type="text" readonly value="${Auth.escapeHtml(geometryLabel)}" aria-label="Geometry">
-        </div>
+        <span class="external-field-label">Layer URL</span>
+        <input class="external-input" type="text" readonly value="${layerUrl}" aria-label="Layer URL">
       </div>
 
       <div class="external-stats" aria-label="Usage">
         <div class="external-stat">
-          <span class="external-stat-label">Tile requests</span>
+          <span class="external-stat-label">Times used</span>
           <span class="external-stat-value">${requests}</span>
         </div>
         <div class="external-stat">
@@ -580,14 +552,11 @@ function renderShareLinks(layerId, links) {
   }).join("");
 
   list.querySelectorAll("[data-copy-link]").forEach((btn) => {
-    btn.addEventListener("click", () => copyToClipboardWithFeedback(btn.dataset.copyLink, btn, "Tile URL copied."));
-  });
-  list.querySelectorAll("[data-copy-source]").forEach((btn) => {
-    btn.addEventListener("click", () => copyToClipboardWithFeedback(btn.dataset.copySource, btn, "Source layer copied."));
+    btn.addEventListener("click", () => copyToClipboardWithFeedback(btn.dataset.copyLink, btn, "Layer URL copied."));
   });
   list.querySelectorAll("[data-revoke-link]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm("Revoke this external share link? Anyone using it will immediately lose access.")) return;
+      if (!confirm("Revoke this link? Anyone using it will lose access right away.")) return;
       await Auth.apiFetch(`/api/layers/${layerId}/share-links/${btn.dataset.revokeLink}/`, { method: "DELETE" });
       await loadShareLinks(layerId);
     });

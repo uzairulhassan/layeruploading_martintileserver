@@ -421,12 +421,53 @@ async function saveMapMeta() {
   setTimeout(() => { btn.textContent = original; }, 1200);
 }
 
-// ---- Share modal ----
+// ---- Share modal (people + Map URL) ----
+const ICON_COPY = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8.5" y="8.5" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 8.5V6.2A1.7 1.7 0 0 0 13.8 4.5H6.2A1.7 1.7 0 0 0 4.5 6.2v7.6A1.7 1.7 0 0 0 6.2 15.5H8.5" stroke="currentColor" stroke-width="1.7"/></svg>`;
+const ICON_TRASH = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7.5h14M10 7.5V5.8A1.3 1.3 0 0 1 11.3 4.5h1.4A1.3 1.3 0 0 1 14 5.8V7.5M8.5 7.5v11.2A1.3 1.3 0 0 0 9.8 20h4.4a1.3 1.3 0 0 0 1.3-1.3V7.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const ICON_USERS = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="9" cy="8" r="3.1" stroke="currentColor" stroke-width="1.6"/><path d="M3.8 18.2c.7-2.7 2.8-4.2 5.2-4.2s4.5 1.5 5.2 4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16.5" cy="9" r="2.4" stroke="currentColor" stroke-width="1.6"/><path d="M15.2 14.2c1.7.2 3.2 1.2 3.9 3.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+const ICON_LINK = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10.2 13.8a4.2 4.2 0 0 1 0-5.9l2.1-2.1a4.2 4.2 0 0 1 5.9 5.9l-1 1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M13.8 10.2a4.2 4.2 0 0 1 0 5.9l-2.1 2.1a4.2 4.2 0 1 1-5.9-5.9l1-1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+
+function isMapOwner() {
+  return MAP_DATA?.my_permission === "owner";
+}
+
+function setShareTab(tab) {
+  const peopleTab = document.getElementById("share-tab-people");
+  const externalTab = document.getElementById("share-tab-external");
+  const peoplePanel = document.getElementById("share-panel-people");
+  const externalPanel = document.getElementById("share-panel-external");
+  const isExternal = tab === "external";
+  peopleTab.classList.toggle("is-active", !isExternal);
+  externalTab.classList.toggle("is-active", isExternal);
+  peopleTab.setAttribute("aria-selected", String(!isExternal));
+  externalTab.setAttribute("aria-selected", String(isExternal));
+  peoplePanel.classList.toggle("is-active", !isExternal);
+  externalPanel.classList.toggle("is-active", isExternal);
+  peoplePanel.hidden = isExternal;
+  externalPanel.hidden = !isExternal;
+  if (isExternal) {
+    externalPanel.classList.add("is-entering");
+    window.setTimeout(() => externalPanel.classList.remove("is-entering"), 280);
+    loadMapShareLinks();
+  }
+}
+
 function openShareModal() {
   document.getElementById("share-search").value = "";
   document.getElementById("share-results").innerHTML = "";
   document.getElementById("share-submit").disabled = true;
   SELECTED_SHARE_USER = null;
+
+  const owner = isMapOwner();
+  document.getElementById("share-people-owner").classList.toggle("hidden", !owner);
+  document.getElementById("share-people-viewer").classList.toggle("hidden", owner);
+  document.getElementById("external-owner-only").classList.toggle("hidden", !owner);
+  document.getElementById("map-external-viewer-note").classList.toggle("hidden", owner);
+  document.getElementById("map-external-copy-status").textContent = "";
+  document.getElementById("map-external-copy-status").classList.remove("is-visible");
+  resetMapExternalCreateForm();
+
+  setShareTab("people");
   renderShareList();
   Auth.openModal("share-modal");
 }
@@ -435,12 +476,18 @@ function renderShareList() {
   const list = document.getElementById("share-list");
   const shares = MAP_DATA.shares || [];
   if (!shares.length) {
-    list.innerHTML = `<li>Not shared with anyone yet.</li>`;
+    list.innerHTML = `
+      <li class="share-empty">
+        <div class="share-empty-state">
+          <span class="share-empty-icon">${ICON_USERS}</span>
+          <span>Not shared with anyone yet.</span>
+        </div>
+      </li>`;
     return;
   }
   list.innerHTML = shares.map((s) => `
-    <li>${s.shared_with_detail.display_name} — ${s.permission}
-      <button class="btn btn-link" data-remove-share="${s.shared_with_detail.id}">remove</button>
+    <li>${Auth.escapeHtml(s.shared_with_detail.display_name)} — ${Auth.escapeHtml(s.permission)}
+      <button type="button" class="btn btn-link" data-remove-share="${s.shared_with_detail.id}">remove</button>
     </li>
   `).join("");
   list.querySelectorAll("[data-remove-share]").forEach((btn) => {
@@ -451,6 +498,192 @@ function renderShareList() {
     });
   });
 }
+
+function getMapExternalLinkType() {
+  const selected = document.querySelector('input[name="map-external-link-type"]:checked');
+  return selected?.value || "expiring";
+}
+
+function syncMapExternalExpiryControls() {
+  const isPermanent = getMapExternalLinkType() === "permanent";
+  const expiryWrap = document.getElementById("map-external-expiry-wrap");
+  const expiryInput = document.getElementById("map-external-expiry");
+  expiryWrap?.classList.toggle("hidden", isPermanent);
+  if (expiryInput) expiryInput.disabled = isPermanent;
+}
+
+function resetMapExternalCreateForm() {
+  const expiring = document.querySelector('input[name="map-external-link-type"][value="expiring"]');
+  if (expiring) expiring.checked = true;
+  const expiryInput = document.getElementById("map-external-expiry");
+  if (expiryInput) {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 7);
+    expiryInput.value = tomorrow.toISOString().slice(0, 10);
+  }
+  document.getElementById("map-external-create-error")?.classList.add("hidden");
+  syncMapExternalExpiryControls();
+}
+
+function formatExpiry(isoString) {
+  const date = new Date(isoString);
+  return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function formatMapExpiryLabel(link) {
+  if (link.never_expires || !link.expires_at) {
+    return `<span class="external-pill external-pill-live"><span class="external-pill-dot" aria-hidden="true"></span>No expiry</span>`;
+  }
+  if (link.is_expired) {
+    return `<span class="external-pill external-pill-expired"><span class="external-pill-dot" aria-hidden="true"></span>Expired ${formatExpiry(link.expires_at)}</span>`;
+  }
+  return `<span class="external-pill"><span class="external-pill-dot" aria-hidden="true"></span>Expires ${formatExpiry(link.expires_at)}</span>`;
+}
+
+async function loadMapShareLinks() {
+  if (!isMapOwner()) return;
+  const list = document.getElementById("map-external-links-list");
+  list.innerHTML = `<li class="share-empty">Loading…</li>`;
+  const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/share-links/`);
+  if (!res.ok) {
+    list.innerHTML = `<li class="share-empty">Could not load share links.</li>`;
+    return;
+  }
+  renderMapShareLinks(await res.json());
+}
+
+function renderMapShareLinks(links) {
+  const list = document.getElementById("map-external-links-list");
+  if (!links.length) {
+    list.innerHTML = `
+      <li class="share-empty">
+        <div class="share-empty-state">
+          <span class="share-empty-icon">${ICON_LINK}</span>
+          <span>No active links.</span>
+        </div>
+      </li>`;
+    return;
+  }
+  list.innerHTML = links.map((link) => {
+    const mapUrl = Auth.escapeHtml(link.style_url);
+    const requests = Number(link.total_requests || 0).toLocaleString();
+    const lastUsed = link.last_used_at ? formatExpiry(link.last_used_at) : "Never";
+    const layerCount = Number(link.layer_count || 0);
+    return `
+    <li class="external-link-card">
+      <div class="external-link-top">
+        <div class="external-link-badges">
+          ${formatMapExpiryLabel(link)}
+          ${link.is_blocked ? `<span class="external-pill external-pill-blocked"><span class="external-pill-dot" aria-hidden="true"></span>Blocked</span>` : ""}
+        </div>
+        <div class="external-link-actions">
+          <button type="button" class="btn btn-sm external-action-btn" data-copy-map-url="${mapUrl}">${ICON_COPY}<span>Copy Map URL</span></button>
+          <button type="button" class="btn btn-sm btn-danger external-action-btn" data-revoke-map-link="${link.id}">${ICON_TRASH}<span>Revoke</span></button>
+        </div>
+      </div>
+
+      <div class="external-field">
+        <span class="external-field-label">Map URL</span>
+        <input class="external-input" type="text" readonly value="${mapUrl}" aria-label="Map URL">
+      </div>
+
+      <div class="external-stats" aria-label="Usage">
+        <div class="external-stat">
+          <span class="external-stat-label">Layers</span>
+          <span class="external-stat-value">${layerCount}</span>
+        </div>
+        <div class="external-stat">
+          <span class="external-stat-label">Times used</span>
+          <span class="external-stat-value">${requests}</span>
+        </div>
+        <div class="external-stat">
+          <span class="external-stat-label">Last used</span>
+          <span class="external-stat-value">${Auth.escapeHtml(lastUsed)}</span>
+        </div>
+      </div>
+    </li>`;
+  }).join("");
+
+  list.querySelectorAll("[data-copy-map-url]").forEach((btn) => {
+    btn.addEventListener("click", () => copyMapShareUrl(btn.dataset.copyMapUrl, btn, "Map URL copied."));
+  });
+  list.querySelectorAll("[data-revoke-map-link]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Revoke this link? Anyone using it will lose access right away.")) return;
+      await Auth.apiFetch(`/api/maps/${MAP_ID}/share-links/${btn.dataset.revokeMapLink}/`, { method: "DELETE" });
+      await loadMapShareLinks();
+    });
+  });
+}
+
+async function copyMapShareUrl(text, btn, message) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const input = document.createElement("input");
+    input.value = text;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+  }
+  const status = document.getElementById("map-external-copy-status");
+  status.textContent = message;
+  status.classList.add("is-visible");
+  document.querySelectorAll("#map-external-links-list .is-copied").forEach((el) => el.classList.remove("is-copied"));
+  btn?.classList.add("is-copied");
+  window.setTimeout(() => {
+    status.classList.remove("is-visible");
+    btn?.classList.remove("is-copied");
+  }, 1800);
+}
+
+document.querySelectorAll("[data-share-tab]").forEach((tab) => {
+  tab.addEventListener("click", () => setShareTab(tab.dataset.shareTab));
+});
+
+document.querySelectorAll('input[name="map-external-link-type"]').forEach((input) => {
+  input.addEventListener("change", syncMapExternalExpiryControls);
+});
+
+document.getElementById("map-external-create-btn").addEventListener("click", async () => {
+  if (!isMapOwner()) return;
+  const errorBox = document.getElementById("map-external-create-error");
+  errorBox.classList.add("hidden");
+
+  const isPermanent = getMapExternalLinkType() === "permanent";
+  const expiryValue = document.getElementById("map-external-expiry").value;
+  let body = { expires_at: null };
+
+  if (!isPermanent) {
+    if (!expiryValue) {
+      errorBox.textContent = "Choose an expiry date.";
+      errorBox.classList.remove("hidden");
+      return;
+    }
+    body = { expires_at: new Date(`${expiryValue}T23:59:59`).toISOString() };
+  }
+
+  const btn = document.getElementById("map-external-create-btn");
+  btn.disabled = true;
+  try {
+    const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/share-links/`, {
+      method: "POST",
+      body,
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.expires_at?.[0] || errBody.detail || "Could not generate the link.");
+    }
+    resetMapExternalCreateForm();
+    await loadMapShareLinks();
+  } catch (err) {
+    errorBox.textContent = err.message;
+    errorBox.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 let shareSearchTimeout;
 document.getElementById("share-search").addEventListener("input", (event) => {
@@ -479,7 +712,7 @@ document.getElementById("share-search").addEventListener("input", (event) => {
 });
 
 document.getElementById("share-submit").addEventListener("click", async () => {
-  if (!SELECTED_SHARE_USER) return;
+  if (!SELECTED_SHARE_USER || !isMapOwner()) return;
   const permission = document.getElementById("share-permission").value;
   await Auth.apiFetch(`/api/maps/${MAP_ID}/share/`, {
     method: "POST",
