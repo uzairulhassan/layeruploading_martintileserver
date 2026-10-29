@@ -264,6 +264,7 @@ class ShareStyleDocumentTests(TestCase):
             geometry_type=LayerInfo.GeometryType.LINESTRING,
             style={"color": "#ff0000", "strokeWidth": 3, "opacity": 0.9},
             label_config={"field": "name", "size": 14, "color": "#111111"},
+            attribute_schema=[{"name": "name", "type": "text"}, {"name": "ref", "type": "text"}],
         )
         self.link = LayerShareLink.objects.create(
             layer=self.layer, created_by=owner, expires_at=timezone.now() + timedelta(days=1)
@@ -285,6 +286,10 @@ class ShareStyleDocumentTests(TestCase):
         self.assertEqual(body["metadata"]["geolayers:source_layer"], TABLE)
         self.assertEqual(body["metadata"]["geolayers:geometry_type"], "LineString")
         self.assertEqual(body["metadata"]["geolayers:style"]["color"], "#ff0000")
+        self.assertEqual(
+            body["metadata"]["geolayers:attribute_schema"],
+            [{"name": "name", "type": "text"}, {"name": "ref", "type": "text"}],
+        )
 
         line = next(layer for layer in body["layers"] if layer["type"] == "line" and "label" not in layer["id"])
         self.assertEqual(line["source-layer"], TABLE)

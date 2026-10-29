@@ -76,6 +76,7 @@ def build_map_share_style(
         )
         layers.extend(paint_layers)
         needs_glyphs = needs_glyphs or layer_needs_glyphs
+        label_config = layer.label_config or {}
         layer_meta.append(
             {
                 "id": str(layer.id),
@@ -84,6 +85,9 @@ def build_map_share_style(
                 "order": map_layer.order,
                 "visible": map_layer.visible,
                 "opacity": map_layer.opacity,
+                "geometry_type": layer.geometry_type or "",
+                "attribute_schema": layer.attribute_schema or [],
+                "label_field": (label_config.get("field") or "").strip(),
             }
         )
 

@@ -5,7 +5,12 @@ let ALL_LAYERS = [];
 let GL_MAP = null;
 let MAP_ID = null;
 let SELECTED_SHARE_USER = null;
+let FEATURE_POPUP = null;
 const ADDED_MAPBOX_LAYER_IDS = [];
+
+const SKIP_FEATURE_KEYS = new Set([
+  "geom", "geometry", "gid", "ogc_fid", "fid", "objectid", "object_id", "id",
+]);
 
 const ICON_POINT = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="7" cy="12" r="2.1" fill="currentColor"/><circle cx="12" cy="12" r="2.1" fill="currentColor"/><circle cx="17" cy="12" r="2.1" fill="currentColor"/></svg>`;
 const ICON_LINE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 16.5 10 7.5l4 5 6-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -87,6 +92,7 @@ function applyBasemapStyle(styleUrl) {
 
   // setStyle wipes custom sources/layers. Old IDs are invalid after the swap.
   const token = ++BASEMAP_RESTORE_TOKEN;
+  closeFeaturePopup();
   ADDED_MAPBOX_LAYER_IDS.length = 0;
   GL_MAP.setStyle(styleUrl);
 
@@ -204,6 +210,7 @@ async function loadMap() {
     });
     GL_MAP.addControl(new mapboxgl.NavigationControl({ visualizePitch: true }), "top-right");
     GL_MAP.addControl(new mapboxgl.ScaleControl({ maxWidth: 120 }), "bottom-left");
+    bindFeatureInspect();
     GL_MAP.on("load", () => {
       renderMapLayers();
       if (shouldAutoFitOnLoad()) fitMapToLayers({ animate: true });
@@ -427,7 +434,145 @@ function fitMapToLayers({ preferLayerId = null, animate = true } = {}) {
   return true;
 }
 
+function closeFeaturePopup() {
+  FEATURE_POPUP?.remove();
+}
+
+function featureAtPoint(point) {
+  if (!GL_MAP) return null;
+  const ids = [...ADDED_MAPBOX_LAYER_IDS].reverse().filter((id) => GL_MAP.getLayer(id));
+  if (!ids.length) return null;
+  return GL_MAP.queryRenderedFeatures(point, { layers: ids })[0] || null;
+}
+
+function mapLayerForFeature(feature) {
+  const sourceId = String(feature?.source || "");
+  if (!sourceId.startsWith("src-")) return null;
+  const layerId = sourceId.slice(4);
+  return MAP_DATA?.map_layers?.find((ml) => String(ml.layer_detail?.id) === layerId) || null;
+}
+
+function humanizeFieldName(name) {
+  const spaced = String(name || "").trim().replace(/[_-]+/g, " ");
+  if (!spaced) return "";
+  if (spaced === spaced.toUpperCase()) {
+    return spaced.toLowerCase().replace(/\b\w/g, (ch) => ch.toUpperCase());
+  }
+  return spaced.replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function isBlankValue(value) {
+  return value == null || (typeof value === "string" && value.trim() === "");
+}
+
+function formatAttrValue(value) {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Number.isInteger(value) ? String(value) : String(Math.round(value * 1e6) / 1e6);
+  }
+  return String(value ?? "").trim();
+}
+
+function propertyByName(properties, fieldName) {
+  if (!properties || !fieldName) return undefined;
+  if (Object.prototype.hasOwnProperty.call(properties, fieldName)) return properties[fieldName];
+  const wanted = String(fieldName).toLowerCase();
+  const match = Object.keys(properties).find((key) => key.toLowerCase() === wanted);
+  return match === undefined ? undefined : properties[match];
+}
+
+function pickTitleField(properties, mapLayer) {
+  const labelField = mapLayer?.layer_detail?.label_config?.field;
+  if (labelField && !isBlankValue(propertyByName(properties, labelField))) return labelField;
+  return Object.keys(properties || {}).find((key) =>
+    /nam|title|label/i.test(key) && !isBlankValue(properties[key])
+  ) || null;
+}
+
+function orderedAttributeEntries(properties, mapLayer, skipKeys) {
+  const skip = new Set([...SKIP_FEATURE_KEYS, ...skipKeys].map((key) => String(key).toLowerCase()));
+  const seen = new Set();
+  const entries = [];
+
+  const push = (name, value) => {
+    const key = name.toLowerCase();
+    if (!name || skip.has(key) || seen.has(key) || isBlankValue(value)) return;
+    seen.add(key);
+    entries.push([name, value]);
+  };
+
+  (mapLayer?.layer_detail?.attribute_schema || []).forEach((col) => {
+    if (col?.name) push(col.name, propertyByName(properties, col.name));
+  });
+  Object.keys(properties || {}).forEach((name) => push(name, properties[name]));
+  return entries;
+}
+
+function buildFeaturePopupHtml(feature) {
+  const mapLayer = mapLayerForFeature(feature);
+  const layer = mapLayer?.layer_detail;
+  const properties = feature?.properties || {};
+  const titleField = pickTitleField(properties, mapLayer);
+  const title = titleField ? formatAttrValue(propertyByName(properties, titleField)) : "";
+  const attrs = orderedAttributeEntries(properties, mapLayer, titleField ? [titleField] : []);
+  const geomType = layer?.geometry_type || feature?.geometry?.type || "";
+
+  const rows = attrs.map(([name, value]) => `
+    <div class="feature-popup-row">
+      <dt>${Auth.escapeHtml(humanizeFieldName(name))}</dt>
+      <dd>${Auth.escapeHtml(formatAttrValue(value))}</dd>
+    </div>
+  `).join("");
+
+  return `
+    <div class="feature-popup">
+      <p class="feature-popup-layer">${Auth.escapeHtml(layer?.name || "Layer")}</p>
+      ${title ? `<h3 class="feature-popup-title">${Auth.escapeHtml(title)}</h3>` : ""}
+      ${rows
+        ? `<dl class="feature-popup-attrs">${rows}</dl>`
+        : `<p class="feature-popup-empty">No attributes.</p>`}
+      ${geomType ? `<p class="feature-popup-meta">${Auth.escapeHtml(geomType)}</p>` : ""}
+    </div>
+  `;
+}
+
+function showFeaturePopup(feature, lngLat) {
+  if (!GL_MAP || !feature) return;
+  if (!FEATURE_POPUP) {
+    FEATURE_POPUP = new mapboxgl.Popup({
+      closeButton: true,
+      closeOnClick: false,
+      maxWidth: "16.5rem",
+      offset: 10,
+      className: "feature-popup-wrap",
+    });
+  }
+  FEATURE_POPUP.setLngLat(lngLat).setHTML(buildFeaturePopupHtml(feature)).addTo(GL_MAP);
+}
+
+function bindFeatureInspect() {
+  if (!GL_MAP) return;
+  GL_MAP.on("click", (event) => {
+    const feature = featureAtPoint(event.point);
+    if (!feature) {
+      closeFeaturePopup();
+      return;
+    }
+    showFeaturePopup(feature, event.lngLat);
+  });
+  GL_MAP.on("mousemove", (event) => {
+    GL_MAP.getCanvas().style.cursor = featureAtPoint(event.point) ? "pointer" : "";
+  });
+  GL_MAP.on("mouseleave", () => {
+    GL_MAP.getCanvas().style.cursor = "";
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeFeaturePopup();
+  });
+}
+
 function clearMapboxLayers() {
+  closeFeaturePopup();
   if (!GL_MAP) {
     ADDED_MAPBOX_LAYER_IDS.length = 0;
     return;
@@ -456,6 +601,36 @@ function renderMapLayers() {
   [...MAP_DATA.map_layers]
     .sort((a, b) => a.order - b.order)
     .forEach((ml) => addMapboxLayer(ml));
+}
+
+function addInvisibleHitLayers(mapLayer, sourceId, tableName, geomType, visibility) {
+  const needsPointHit = !geomType || geomType === "Point" || geomType === "MultiPoint" || geomType === "Geometry";
+  const needsLineHit = !geomType || geomType === "LineString" || geomType === "MultiLineString" || geomType === "Geometry";
+  if (needsPointHit) {
+    const id = `layer-${mapLayer.id}-hit-circle`;
+    GL_MAP.addLayer({
+      id, source: sourceId, "source-layer": tableName, type: "circle",
+      layout: { visibility },
+      paint: {
+        "circle-radius": 14,
+        "circle-opacity": 0,
+        "circle-stroke-width": 0,
+      },
+    });
+    ADDED_MAPBOX_LAYER_IDS.push(id);
+  }
+  if (needsLineHit) {
+    const id = `layer-${mapLayer.id}-hit-line`;
+    GL_MAP.addLayer({
+      id, source: sourceId, "source-layer": tableName, type: "line",
+      layout: { visibility },
+      paint: {
+        "line-width": 16,
+        "line-opacity": 0,
+      },
+    });
+    ADDED_MAPBOX_LAYER_IDS.push(id);
+  }
 }
 
 function addMapboxLayer(mapLayer) {
@@ -540,6 +715,8 @@ function addMapboxLayer(mapLayer) {
       ADDED_MAPBOX_LAYER_IDS.push(lineId);
     }
   }
+
+  addInvisibleHitLayers(mapLayer, sourceId, tableName, geomType, visibility);
 
   const labelConfig = layer.label_config || {};
   if (labelConfig.field) {

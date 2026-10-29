@@ -23,7 +23,13 @@ class MapShareAuthTests(TestCase):
         self.owner = users.create_user("mapowner", "mapowner@example.com", "pw-12345!")
         self.stranger = users.create_user("stranger2", "stranger2@example.com", "pw-12345!")
         self.layer_a = LayerInfo.objects.create(
-            owner=self.owner, name="A", schema_name="layers_data", table_name=TABLE_A
+            owner=self.owner,
+            name="A",
+            schema_name="layers_data",
+            table_name=TABLE_A,
+            geometry_type=LayerInfo.GeometryType.LINESTRING,
+            attribute_schema=[{"name": "name", "type": "text"}],
+            label_config={"field": "name"},
         )
         self.layer_b = LayerInfo.objects.create(
             owner=self.owner, name="B", schema_name="layers_data", table_name=TABLE_B
@@ -93,6 +99,11 @@ class MapShareAuthTests(TestCase):
         self.assertIn(f"src-{TABLE_A}", doc["sources"])
         self.assertIn(f"src-{TABLE_B}", doc["sources"])
         self.assertEqual(doc["metadata"]["geolayers:kind"], "map")
+        meta_a = next(item for item in doc["metadata"]["geolayers:layers"] if item["table"] == TABLE_A)
+        self.assertEqual(meta_a["name"], "A")
+        self.assertEqual(meta_a["geometry_type"], "LineString")
+        self.assertEqual(meta_a["attribute_schema"], [{"name": "name", "type": "text"}])
+        self.assertEqual(meta_a["label_field"], "name")
         # Hidden layer still present with visibility none (stays synced when toggled).
         hidden = next(layer for layer in doc["layers"] if layer["id"].startswith(TABLE_B))
         self.assertEqual(hidden["layout"]["visibility"], "none")

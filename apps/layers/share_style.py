@@ -164,6 +164,7 @@ def build_share_style(*, layer: LayerInfo, tiles_url: str) -> dict:
             "geolayers:suggested_geometry": SUGGESTED_GEOMETRY.get(geom, "line"),
             "geolayers:style": style,
             "geolayers:label_config": label_config,
+            "geolayers:attribute_schema": layer.attribute_schema or [],
         },
         "sources": {
             _SOURCE_ID: {
