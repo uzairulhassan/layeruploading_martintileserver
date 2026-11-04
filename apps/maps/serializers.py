@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.serializers import UserSummarySerializer
-from apps.layers.models import LayerInfo
+from apps.layers.models import LayerGroup, LayerInfo
 from apps.layers.serializers import LayerInfoSerializer
 
 from .models import MapLayer, MapProject, MapShare, MapShareLink
@@ -59,11 +59,19 @@ class MapProjectSerializer(serializers.ModelSerializer):
 
 
 class AddMapLayerSerializer(serializers.Serializer):
-    layer = serializers.PrimaryKeyRelatedField(queryset=LayerInfo.objects.all())
+    """Add one ``layer``, or every layer of a KML/KMZ ``group`` (polygons → lines → points)."""
+
+    layer = serializers.PrimaryKeyRelatedField(queryset=LayerInfo.objects.all(), required=False)
+    group = serializers.PrimaryKeyRelatedField(queryset=LayerGroup.objects.all(), required=False)
     order = serializers.IntegerField(required=False)
     visible = serializers.BooleanField(required=False, default=True)
     opacity = serializers.FloatField(required=False, default=1.0)
     style_override = serializers.JSONField(required=False, allow_null=True, default=None)
+
+    def validate(self, attrs):
+        if bool(attrs.get("layer")) == bool(attrs.get("group")):
+            raise serializers.ValidationError("Send exactly one of 'layer' or 'group'.")
+        return attrs
 
 
 class ReorderMapLayersSerializer(serializers.Serializer):

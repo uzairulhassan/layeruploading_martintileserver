@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.layers.models import LayerInfo
+from apps.layers.serializers import sort_group_layers
 
 from .models import MapLayer, MapProject, MapShare, MapShareLink
 from .permissions import IsMapOwnerOrSharedWithPermission
@@ -36,6 +37,32 @@ class MapProjectViewSet(viewsets.ModelViewSet):
     def _accessible_layers(self, user):
         return LayerInfo.objects.filter(Q(owner=user) | Q(shares__shared_with=user)).distinct()
 
+    def _add_group_layers(self, map_project, group, data):
+        """Add every layer of a KML/KMZ group the user can see, polygons at the bottom."""
+        layers = sort_group_layers(self._accessible_layers(self.request.user).filter(group=group))
+        if not layers:
+            return Response(
+                {"detail": "You do not have access to this group."}, status=status.HTTP_403_FORBIDDEN
+            )
+
+        start = data.get("order")
+        if start is None:
+            start = map_project.map_layers.count()
+        map_layers = []
+        for offset, layer in enumerate(layers):
+            map_layer, _ = MapLayer.objects.update_or_create(
+                map=map_project,
+                layer=layer,
+                defaults={
+                    "order": start + offset,
+                    "visible": data.get("visible", True),
+                    "opacity": data.get("opacity", 1.0),
+                    "style_override": data.get("style_override"),
+                },
+            )
+            map_layers.append(map_layer)
+        return Response(MapLayerSerializer(map_layers, many=True).data, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=["get", "post"], url_path="layers")
     def layers_collection(self, request, pk=None):
         map_project = self.get_object()
@@ -46,6 +73,8 @@ class MapProjectViewSet(viewsets.ModelViewSet):
 
         serializer = AddMapLayerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        if group := serializer.validated_data.get("group"):
+            return self._add_group_layers(map_project, group, serializer.validated_data)
         layer = serializer.validated_data["layer"]
 
         if not self._accessible_layers(request.user).filter(id=layer.id).exists():

@@ -1,11 +1,22 @@
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.serializers import UserSummarySerializer
 
-from .models import LayerInfo, LayerShare, LayerShareLink
+from .models import LayerGroup, LayerInfo, LayerShare, LayerShareLink
+
+UPLOAD_EXTENSIONS = (".zip", ".kml", ".kmz")
+
+
+class LayerGroupSummarySerializer(serializers.ModelSerializer):
+    """Compact group reference embedded in each grouped layer."""
+
+    class Meta:
+        model = LayerGroup
+        fields = ["id", "name", "source_format"]
 
 
 class LayerShareSerializer(serializers.ModelSerializer):
@@ -27,6 +38,7 @@ class LayerInfoSerializer(serializers.ModelSerializer):
     source_layer = serializers.SerializerMethodField()
     my_permission = serializers.SerializerMethodField()
     shares = LayerShareSerializer(many=True, read_only=True)
+    group_detail = LayerGroupSummarySerializer(source="group", read_only=True)
 
     class Meta:
         model = LayerInfo
@@ -34,12 +46,12 @@ class LayerInfoSerializer(serializers.ModelSerializer):
             "id", "name", "description", "owner", "owner_detail",
             "geometry_type", "srid", "feature_count", "bounds", "attribute_schema",
             "style", "label_config", "source_filename",
-            "xyz_url", "source_layer",
+            "xyz_url", "source_layer", "group", "group_detail",
             "my_permission", "shares", "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "owner", "geometry_type", "srid", "feature_count", "bounds",
-            "attribute_schema", "source_filename", "created_at", "updated_at",
+            "attribute_schema", "source_filename", "group", "created_at", "updated_at",
         ]
 
     def _tiles_base(self):
@@ -133,14 +145,74 @@ class LayerShareLinkSerializer(serializers.ModelSerializer):
         return obj.usage.aggregate(total=Sum("request_count"))["total"] or 0
 
 
+# Child layers listed polygons → lines → points, the order they stack on a map.
+_GROUP_LAYER_ORDER = {
+    LayerInfo.GeometryType.MULTIPOLYGON: 0,
+    LayerInfo.GeometryType.MULTILINESTRING: 1,
+    LayerInfo.GeometryType.MULTIPOINT: 2,
+}
+
+
+def sort_group_layers(layers):
+    return sorted(layers, key=lambda layer: _GROUP_LAYER_ORDER.get(layer.geometry_type, 3))
+
+
+class LayerGroupSerializer(serializers.ModelSerializer):
+    """A KML/KMZ upload and the layers it was split into (only those the user can see)."""
+
+    owner_detail = UserSummarySerializer(source="owner", read_only=True)
+    layers = serializers.SerializerMethodField()
+    layer_count = serializers.SerializerMethodField()
+    feature_count = serializers.SerializerMethodField()
+    my_permission = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LayerGroup
+        fields = [
+            "id", "name", "description", "owner", "owner_detail",
+            "source_format", "source_filename", "layer_count", "feature_count",
+            "layers", "my_permission", "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "owner", "source_format", "source_filename", "created_at", "updated_at",
+        ]
+
+    def _layers(self, obj):
+        return sort_group_layers(obj.layers.all())
+
+    def get_layers(self, obj):
+        return LayerInfoSerializer(self._layers(obj), many=True, context=self.context).data
+
+    def get_layer_count(self, obj):
+        return len(self._layers(obj))
+
+    def get_feature_count(self, obj):
+        return sum(layer.feature_count for layer in self._layers(obj))
+
+    def get_my_permission(self, obj):
+        request = self.context.get("request")
+        if request is None:
+            return None
+        return "owner" if obj.owner_id == request.user.id else "view"
+
+
+class LayerGroupShareSerializer(serializers.Serializer):
+    """Share every layer of a group with one user (same permission on each)."""
+
+    shared_with = serializers.PrimaryKeyRelatedField(queryset=get_user_model().objects.all())
+    permission = serializers.ChoiceField(choices=LayerShare.Permission.choices, default=LayerShare.Permission.VIEW)
+
+
 class LayerUploadSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150)
     description = serializers.CharField(required=False, allow_blank=True, default="")
     file = serializers.FileField()
 
     def validate_file(self, value):
-        if not value.name.lower().endswith(".zip"):
-            raise serializers.ValidationError("Upload a .zip archive containing the shapefile (.shp/.shx/.dbf/.prj).")
+        if not value.name.lower().endswith(UPLOAD_EXTENSIONS):
+            raise serializers.ValidationError(
+                "Upload a .zip shapefile archive (.shp/.shx/.dbf/.prj) or a .kml / .kmz file."
+            )
         if value.size > settings.MAX_SHAPEFILE_UPLOAD_SIZE:
             max_mb = settings.MAX_SHAPEFILE_UPLOAD_SIZE // (1024 * 1024)
             raise serializers.ValidationError(f"File exceeds the {max_mb}MB upload limit.")

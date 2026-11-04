@@ -306,7 +306,7 @@ function renderActiveLayers() {
 }
 
 async function loadAvailableLayers() {
-  const res = await Auth.apiFetch("/api/layers/?page_size=200");
+  const res = await Auth.apiFetch("/api/layers/?page_size=500");
   const data = await res.json();
   ALL_LAYERS = data.results || data;
   renderAvailableLayers();
@@ -653,6 +653,14 @@ function addMapboxLayer(mapLayer) {
   const style = { ...(layer.style || {}), ...(mapLayer.style_override || {}) };
   const visibility = mapLayer.visible ? "visible" : "none";
   const geomType = layer.geometry_type || "";
+  // KML/KMZ layers keep each feature's own colour (kml_color / kml_stroke / kml_width,
+  // alpha included) until the user picks a single colour. Mirrors apps/layers/share_style.py.
+  const useSource = !!style.useSourceColors;
+  const styleOpacity = useSource ? 1 : style.opacity;
+  const featureColor = (column, fallback) =>
+    useSource ? ["to-color", ["get", column], fallback] : fallback;
+  const featureWidth = (fallback) =>
+    useSource ? ["case", ["has", "kml_width"], ["to-number", ["get", "kml_width"]], fallback] : fallback;
 
   if (geomType === "Point" || geomType === "MultiPoint") {
     const id = `layer-${mapLayer.id}-circle`;
@@ -660,11 +668,11 @@ function addMapboxLayer(mapLayer) {
       id, source: sourceId, "source-layer": tableName, type: "circle",
       layout: { visibility },
       paint: {
-        "circle-color": style.color || "#0F2D53",
+        "circle-color": featureColor("kml_color", style.color || "#0F2D53"),
         "circle-radius": 5,
         "circle-stroke-color": style.strokeColor || "#0a2140",
         "circle-stroke-width": style.strokeWidth ?? 1,
-        "circle-opacity": mapLayer.opacity ?? style.opacity ?? 0.8,
+        "circle-opacity": mapLayer.opacity ?? styleOpacity ?? 0.8,
       },
     });
     ADDED_MAPBOX_LAYER_IDS.push(id);
@@ -674,9 +682,9 @@ function addMapboxLayer(mapLayer) {
       id, source: sourceId, "source-layer": tableName, type: "line",
       layout: { visibility },
       paint: {
-        "line-color": style.color || "#0F2D53",
-        "line-width": style.strokeWidth ?? 2,
-        "line-opacity": mapLayer.opacity ?? style.opacity ?? 1,
+        "line-color": featureColor("kml_color", style.color || "#0F2D53"),
+        "line-width": featureWidth(style.strokeWidth ?? 2),
+        "line-opacity": mapLayer.opacity ?? styleOpacity ?? 1,
       },
     });
     ADDED_MAPBOX_LAYER_IDS.push(id);
@@ -687,16 +695,16 @@ function addMapboxLayer(mapLayer) {
       id, source: sourceId, "source-layer": tableName, type: "fill",
       layout: { visibility },
       paint: {
-        "fill-color": style.color || "#0F2D53",
-        "fill-opacity": mapLayer.opacity ?? style.opacity ?? 0.6,
+        "fill-color": featureColor("kml_color", style.color || "#0F2D53"),
+        "fill-opacity": mapLayer.opacity ?? styleOpacity ?? 0.6,
       },
     });
     GL_MAP.addLayer({
       id: outlineId, source: sourceId, "source-layer": tableName, type: "line",
       layout: { visibility },
       paint: {
-        "line-color": style.strokeColor || "#0a2140",
-        "line-width": style.strokeWidth ?? 1,
+        "line-color": featureColor("kml_stroke", style.strokeColor || "#0a2140"),
+        "line-width": featureWidth(style.strokeWidth ?? 1),
       },
     });
     ADDED_MAPBOX_LAYER_IDS.push(id, outlineId);

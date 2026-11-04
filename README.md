@@ -25,6 +25,15 @@ apps/
 Upload flow: `.zip` shapefile → `ogr2ogr` → `layers_data.layer_<uuid>` →
 Martin `geolayers_tile?layer=` → Mapbox GL / external share link `/x/<token>/…`.
 
+**KML / KMZ:** one file can mix points, lines and polygons, so it becomes a
+`LayerGroup` with one layer (and table) per geometry type present
+(`apps/layers/kml_import.py`). Each feature keeps its KML colour in
+`kml_color` / `kml_stroke` / `kml_width`; the layer style starts from the most
+common KML style with `useSourceColors: true`, and users can restyle it.
+`/api/layer-groups/` lists, renames, shares or deletes a whole upload;
+`POST /api/maps/<id>/layers/ {"group": …}` adds all of its layers. Needs GDAL's
+LIBKML driver (`ogrinfo --formats | grep LIBKML`).
+
 **Map URL / Layer URL:** owners create revocable links.
 Layer URL → `/x/<token>/style.json`. Map URL → `/m/<token>/style.json`
 (full composition). Styles stay live; revoke / expiry / block apply immediately.

@@ -6,13 +6,44 @@ from django.db import models
 from django.utils import timezone
 
 
+class LayerGroup(models.Model):
+    """One KML/KMZ upload, split into up to three layers (points, lines, polygons).
+
+    A KML document mixes geometry types, but each ``LayerInfo`` table holds one,
+    so the import creates one ``LayerInfo`` per type present and links them here.
+    Shapefile uploads are never grouped (``LayerInfo.group`` stays null).
+    """
+
+    class SourceFormat(models.TextChoices):
+        KML = "kml", "KML"
+        KMZ = "kmz", "KMZ"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="layer_groups")
+
+    name = models.CharField(max_length=150)
+    description = models.TextField(blank=True)
+
+    source_format = models.CharField(max_length=10, choices=SourceFormat.choices)
+    source_filename = models.CharField(max_length=255, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.name
+
+
 class LayerInfo(models.Model):
-    """Metadata for a shapefile imported into its own PostGIS table.
+    """Metadata for an uploaded layer imported into its own PostGIS table.
 
     Features live in ``schema_name.table_name`` (not a Django model) because
-    each shapefile has its own attribute schema. Martin serves every table via
+    each upload has its own attribute schema. Martin serves every table via
     ``layers_data.geolayers_tile(?layer=…)``. This row tracks ownership, style,
-    labels and sharing.
+    labels and sharing. Layers split out of one KML/KMZ share a ``group``.
     """
 
     class GeometryType(models.TextChoices):
@@ -45,6 +76,15 @@ class LayerInfo(models.Model):
 
     source_filename = models.CharField(max_length=255, blank=True)
 
+    group = models.ForeignKey(
+        LayerGroup,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="layers",
+        help_text="Set for layers split out of one KML/KMZ upload; null for shapefiles.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -53,6 +93,9 @@ class LayerInfo(models.Model):
         permissions = [
             ("upload_layerinfo", "Can upload new layers"),
             ("share_layerinfo", "Can share layers with other users"),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=["group", "geometry_type"], name="layerinfo_one_geometry_type_per_group"),
         ]
 
     def __str__(self):

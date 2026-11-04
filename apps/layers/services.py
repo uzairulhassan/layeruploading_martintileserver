@@ -15,7 +15,7 @@ from pathlib import Path
 from django.conf import settings
 from django.db import connection, transaction
 
-from .models import LayerInfo
+from .models import LayerGroup, LayerInfo
 
 REQUIRED_SHAPEFILE_EXTENSIONS = {".shp", ".shx", ".dbf"}
 
@@ -29,8 +29,8 @@ _GEOMETRY_TYPE_MAP = {
 }
 
 
-class ShapefileImportError(Exception):
-    """Raised for any user-correctable failure in the import pipeline."""
+class LayerImportError(Exception):
+    """Raised for any user-correctable failure in an import pipeline (shapefile or KML)."""
 
 
 def _pg_connection_string() -> str:
@@ -50,21 +50,21 @@ def _extract_shapefile(zip_path: Path, dest_dir: Path) -> Path:
         for name in zf.namelist():
             target = dest_dir / Path(name).name
             if not str(target.resolve()).startswith(str(dest_dir.resolve())):
-                raise ShapefileImportError("Unsafe path found inside archive.")
+                raise LayerImportError("Unsafe path found inside archive.")
         zf.extractall(dest_dir)
 
     shp_files = list(dest_dir.rglob("*.shp"))
     if not shp_files:
-        raise ShapefileImportError("Archive does not contain a .shp file.")
+        raise LayerImportError("Archive does not contain a .shp file.")
     if len(shp_files) > 1:
-        raise ShapefileImportError("Archive must contain exactly one shapefile.")
+        raise LayerImportError("Archive must contain exactly one shapefile.")
 
     shp_path = shp_files[0]
     stem = shp_path.stem
     present = {p.suffix.lower() for p in dest_dir.rglob(f"{stem}.*")}
     missing = REQUIRED_SHAPEFILE_EXTENSIONS - present
     if missing:
-        raise ShapefileImportError(f"Shapefile is missing required files: {', '.join(sorted(missing))}")
+        raise LayerImportError(f"Shapefile is missing required files: {', '.join(sorted(missing))}")
     return shp_path
 
 
@@ -102,14 +102,19 @@ def _run_ogr2ogr(shp_path: Path, schema_name: str, table_name: str):
         "-nlt", "PROMOTE_TO_MULTI",
         "-overwrite",
     ]
+    run_ogr2ogr(cmd)
+
+
+def run_ogr2ogr(cmd: list[str]):
+    """Run one ogr2ogr command; failures become a user-facing ``LayerImportError``."""
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     except FileNotFoundError as exc:
-        raise ShapefileImportError(
+        raise LayerImportError(
             f"ogr2ogr executable not found at '{settings.OGR2OGR_PATH}'. Is GDAL installed?"
         ) from exc
     if result.returncode != 0:
-        raise ShapefileImportError(f"ogr2ogr failed: {result.stderr.strip() or result.stdout.strip()}")
+        raise LayerImportError(f"ogr2ogr failed: {result.stderr.strip() or result.stdout.strip()}")
 
 
 def _introspect_table(schema_name: str, table_name: str) -> dict:
@@ -200,8 +205,22 @@ def import_shapefile(*, owner, name: str, description: str, uploaded_file) -> La
 
 
 def delete_layer(layer: LayerInfo):
-    _drop_table(layer.schema_name, layer.table_name)
-    layer.delete()
+    """Drop the layer's table and row; a KML group goes with its last layer."""
+    group_id = layer.group_id
+    with transaction.atomic():
+        _drop_table(layer.schema_name, layer.table_name)
+        layer.delete()
+        if group_id and not LayerInfo.objects.filter(group_id=group_id).exists():
+            LayerGroup.objects.filter(pk=group_id).delete()
+
+
+def delete_layer_group(group: LayerGroup):
+    """Drop every table in a KML/KMZ group, then the group (its LayerInfo rows cascade)."""
+    with transaction.atomic():
+        # Query directly: the viewset prefetches only the layers the caller can see.
+        for layer in LayerInfo.objects.filter(group=group):
+            _drop_table(layer.schema_name, layer.table_name)
+        group.delete()
 
 
 def sample_attribute_value(layer: LayerInfo, field_name: str) -> str | None:

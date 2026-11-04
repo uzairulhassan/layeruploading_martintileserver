@@ -28,7 +28,7 @@ function permissionLabel(permission) {
 }
 
 async function loadLayers() {
-  const res = await Auth.apiFetch("/api/layers/");
+  const res = await Auth.apiFetch("/api/layers/?page_size=500");
   const data = await res.json();
   CURRENT_LAYERS = data.results || data;
   renderLayers();

@@ -28,3 +28,18 @@ class IsOwnerOrSharedWithPermission(BasePermission):
             return False
 
         return share.permission == LayerShare.Permission.EDIT
+
+
+class IsGroupOwnerOrViewerPermission(BasePermission):
+    """KML/KMZ groups: the owner manages the group; users with any of its layers can read it.
+
+    Per-layer edit rights still apply on /api/layers/<id>/ for style and labels.
+    """
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        if obj.owner_id == request.user.id:
+            return True
+        return request.method in SAFE_METHODS

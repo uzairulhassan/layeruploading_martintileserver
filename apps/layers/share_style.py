@@ -16,6 +16,19 @@ _DEFAULT_STROKE = "#0a2140"
 _SOURCE_ID = "geolayers"
 
 
+def _feature_color(style: dict, column: str, fallback: str):
+    """Per-feature KML colour (``kml_color`` / ``kml_stroke``) when the layer keeps its KML colours."""
+    if style.get("useSourceColors"):
+        return ["to-color", ["get", column], fallback]
+    return fallback
+
+
+def _feature_width(style: dict, fallback: float):
+    if style.get("useSourceColors"):
+        return ["case", ["has", "kml_width"], ["to-number", ["get", "kml_width"]], fallback]
+    return fallback
+
+
 def build_layer_paint_layers(
     *,
     layer: LayerInfo,
@@ -37,8 +50,16 @@ def build_layer_paint_layers(
     color = style.get("color") or _DEFAULT_COLOR
     stroke_color = style.get("strokeColor") or _DEFAULT_STROKE
     stroke_width = style.get("strokeWidth")
-    # Map-level opacity wins when provided; otherwise layer style opacity.
-    layer_opacity = opacity if opacity is not None else style.get("opacity")
+    # Map-level opacity wins when provided; otherwise layer style opacity. KML colours
+    # already carry their own alpha, so don't apply the layer opacity on top of them.
+    if opacity is not None:
+        layer_opacity = opacity
+    elif style.get("useSourceColors"):
+        layer_opacity = 1
+    else:
+        layer_opacity = style.get("opacity")
+    fill_color = _feature_color(style, "kml_color", color)
+    outline_color = _feature_color(style, "kml_stroke", stroke_color)
     layout = {"visibility": visibility}
     layers: list[dict] = []
 
@@ -51,7 +72,7 @@ def build_layer_paint_layers(
                 "source-layer": table,
                 "layout": layout,
                 "paint": {
-                    "circle-color": color,
+                    "circle-color": fill_color,
                     "circle-radius": 5,
                     "circle-stroke-color": stroke_color,
                     "circle-stroke-width": stroke_width if stroke_width is not None else 1,
@@ -68,8 +89,8 @@ def build_layer_paint_layers(
                 "source-layer": table,
                 "layout": layout,
                 "paint": {
-                    "line-color": color,
-                    "line-width": stroke_width if stroke_width is not None else 2,
+                    "line-color": fill_color,
+                    "line-width": _feature_width(style, stroke_width if stroke_width is not None else 2),
                     "line-opacity": layer_opacity if layer_opacity is not None else 1,
                 },
             }
@@ -83,7 +104,7 @@ def build_layer_paint_layers(
                 "source-layer": table,
                 "layout": layout,
                 "paint": {
-                    "fill-color": color,
+                    "fill-color": fill_color,
                     "fill-opacity": layer_opacity if layer_opacity is not None else 0.6,
                 },
             }
@@ -96,8 +117,8 @@ def build_layer_paint_layers(
                 "source-layer": table,
                 "layout": layout,
                 "paint": {
-                    "line-color": stroke_color,
-                    "line-width": stroke_width if stroke_width is not None else 1,
+                    "line-color": outline_color,
+                    "line-width": _feature_width(style, stroke_width if stroke_width is not None else 1),
                 },
             }
         )

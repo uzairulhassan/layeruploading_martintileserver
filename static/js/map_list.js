@@ -21,7 +21,7 @@ function permissionLabel(permission) {
 
 async function loadMaps() {
   try {
-    const res = await Auth.apiFetch("/api/maps/");
+    const res = await Auth.apiFetch("/api/maps/?page_size=500");
     if (!res.ok) {
       throw new Error(await Toast.fromResponse(res, "Could not load maps."));
     }

@@ -6,6 +6,7 @@ from django.views.static import serve
 
 from apps.layers.tile_auth import validate_tile_request
 from apps.layers.tile_proxy import serve_shared_style, serve_shared_tile
+from apps.layers.urls import group_urlpatterns
 from apps.maps.share_proxy import serve_shared_map_style, serve_shared_map_tile
 
 urlpatterns = [
@@ -25,6 +26,7 @@ urlpatterns = [
     path("tiles-auth/validate/", validate_tile_request, name="tile_auth_validate"),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/layers/", include("apps.layers.urls")),
+    path("api/layer-groups/", include((group_urlpatterns, "layer_groups_api"))),
     path("api/maps/", include("apps.maps.urls")),
     path("", include("apps.core.urls")),
 ]

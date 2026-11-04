@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import LayerInfo, LayerShare, LayerShareLink, LayerShareLinkUsage
+from .models import LayerGroup, LayerInfo, LayerShare, LayerShareLink, LayerShareLinkUsage
 
 
 class LayerShareLinkUsageInline(admin.TabularInline):
@@ -17,6 +17,26 @@ class LayerShareInline(admin.TabularInline):
     model = LayerShare
     extra = 0
     fk_name = "layer"
+
+
+class GroupLayerInline(admin.TabularInline):
+    model = LayerInfo
+    extra = 0
+    can_delete = False
+    fields = ("name", "geometry_type", "feature_count", "table_name")
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(LayerGroup)
+class LayerGroupAdmin(admin.ModelAdmin):
+    list_display = ("name", "owner", "source_format", "created_at")
+    list_filter = ("source_format",)
+    search_fields = ("name", "owner__username", "source_filename")
+    readonly_fields = ("source_format", "source_filename")
+    inlines = [GroupLayerInline]
 
 
 @admin.register(LayerInfo)
