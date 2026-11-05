@@ -8,9 +8,12 @@ let SELECTED_SHARE_USER = null;
 let FEATURE_POPUP = null;
 const ADDED_MAPBOX_LAYER_IDS = [];
 
+/* Keep in sync with geotrak-maps-component/src/featurePopup.js */
 const SKIP_FEATURE_KEYS = new Set([
   "geom", "geometry", "gid", "ogc_fid", "fid", "objectid", "object_id", "id",
+  "kml_color", "kml_stroke", "kml_width", "kml_fill", "kml_outline",
 ]);
+const MAX_POPUP_FIELDS = 8;
 
 const ICON_POINT = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="7" cy="12" r="2.1" fill="currentColor"/><circle cx="12" cy="12" r="2.1" fill="currentColor"/><circle cx="17" cy="12" r="2.1" fill="currentColor"/></svg>`;
 const ICON_LINE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 16.5 10 7.5l4 5 6-8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -501,13 +504,15 @@ function mapLayerForFeature(feature) {
   return MAP_DATA?.map_layers?.find((ml) => String(ml.layer_detail?.id) === layerId) || null;
 }
 
-function humanizeFieldName(name) {
-  const spaced = String(name || "").trim().replace(/[_-]+/g, " ");
+/** Simple label: road_name → Road name (same as geotrak-maps-component). */
+function simpleFieldLabel(name) {
+  const spaced = String(name || "")
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
   if (!spaced) return "";
-  if (spaced === spaced.toUpperCase()) {
-    return spaced.toLowerCase().replace(/\b\w/g, (ch) => ch.toUpperCase());
-  }
-  return spaced.replace(/\b\w/g, (ch) => ch.toUpperCase());
+  const lower = spaced.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
 function isBlankValue(value) {
@@ -517,7 +522,7 @@ function isBlankValue(value) {
 function formatAttrValue(value) {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number" && Number.isFinite(value)) {
-    return Number.isInteger(value) ? String(value) : String(Math.round(value * 1e6) / 1e6);
+    return Number.isInteger(value) ? String(value) : String(Math.round(value * 1e4) / 1e4);
   }
   return String(value ?? "").trim();
 }
@@ -533,9 +538,15 @@ function propertyByName(properties, fieldName) {
 function pickTitleField(properties, mapLayer) {
   const labelField = mapLayer?.layer_detail?.label_config?.field;
   if (labelField && !isBlankValue(propertyByName(properties, labelField))) return labelField;
-  return Object.keys(properties || {}).find((key) =>
-    /nam|title|label/i.test(key) && !isBlankValue(properties[key])
-  ) || null;
+  return (
+    Object.keys(properties || {}).find(
+      (key) => /^(name|title|label)$/i.test(key) && !isBlankValue(properties[key]),
+    )
+    || Object.keys(properties || {}).find(
+      (key) => /name|title|label/i.test(key) && !isBlankValue(properties[key]),
+    )
+    || null
+  );
 }
 
 function orderedAttributeEntries(properties, mapLayer, skipKeys) {
@@ -546,6 +557,7 @@ function orderedAttributeEntries(properties, mapLayer, skipKeys) {
   const push = (name, value) => {
     const key = name.toLowerCase();
     if (!name || skip.has(key) || seen.has(key) || isBlankValue(value)) return;
+    if (key.startsWith("kml_")) return;
     seen.add(key);
     entries.push([name, value]);
   };
@@ -554,7 +566,7 @@ function orderedAttributeEntries(properties, mapLayer, skipKeys) {
     if (col?.name) push(col.name, propertyByName(properties, col.name));
   });
   Object.keys(properties || {}).forEach((name) => push(name, properties[name]));
-  return entries;
+  return entries.slice(0, MAX_POPUP_FIELDS);
 }
 
 function buildFeaturePopupHtml(feature) {
@@ -564,23 +576,21 @@ function buildFeaturePopupHtml(feature) {
   const titleField = pickTitleField(properties, mapLayer);
   const title = titleField ? formatAttrValue(propertyByName(properties, titleField)) : "";
   const attrs = orderedAttributeEntries(properties, mapLayer, titleField ? [titleField] : []);
-  const geomType = layer?.geometry_type || feature?.geometry?.type || "";
 
   const rows = attrs.map(([name, value]) => `
     <div class="feature-popup-row">
-      <dt>${Auth.escapeHtml(humanizeFieldName(name))}</dt>
-      <dd>${Auth.escapeHtml(formatAttrValue(value))}</dd>
+      <span class="feature-popup-key">${Auth.escapeHtml(simpleFieldLabel(name))}</span>
+      <span class="feature-popup-val">${Auth.escapeHtml(formatAttrValue(value))}</span>
     </div>
   `).join("");
 
   return `
     <div class="feature-popup">
       <p class="feature-popup-layer">${Auth.escapeHtml(layer?.name || "Layer")}</p>
-      ${title ? `<h3 class="feature-popup-title">${Auth.escapeHtml(title)}</h3>` : ""}
+      ${title ? `<p class="feature-popup-title">${Auth.escapeHtml(title)}</p>` : ""}
       ${rows
-        ? `<dl class="feature-popup-attrs">${rows}</dl>`
-        : `<p class="feature-popup-empty">No attributes.</p>`}
-      ${geomType ? `<p class="feature-popup-meta">${Auth.escapeHtml(geomType)}</p>` : ""}
+        ? `<div class="feature-popup-attrs">${rows}</div>`
+        : `<p class="feature-popup-empty">No details</p>`}
     </div>
   `;
 }
