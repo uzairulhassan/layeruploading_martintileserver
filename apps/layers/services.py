@@ -1,10 +1,10 @@
-"""Shapefile -> dynamic PostGIS table import pipeline.
+"""Shared PostGIS import helpers for shapefile and KML/KMZ uploads.
 
-Uploaded shapefiles (as a .zip containing .shp/.shx/.dbf/.prj) are imported
-with ogr2ogr into a brand-new, uniquely-named table in the ``LAYER_TABLE_SCHEMA``
-schema (default ``layers_data``). Martin serves every such table through the
-shared ``layers_data.geolayers_tile`` function source (``?layer=<table>``), so
-new uploads are tileable immediately with no catalog reload or restart.
+Shapefile (.zip with .shp/.shx/.dbf/.prj) import lives here. KML/KMZ splitting
+lives in ``kml_import`` and reuses these helpers (ogr2ogr runner, table naming,
+introspection, drop/delete). Every imported table sits in ``LAYER_TABLE_SCHEMA``
+(default ``layers_data``) and is served by Martin via
+``layers_data.geolayers_tile(?layer=<table>)`` with no catalog reload.
 """
 import subprocess
 import tempfile

@@ -41,10 +41,14 @@ class LayerGroupAdmin(admin.ModelAdmin):
 
 @admin.register(LayerInfo)
 class LayerInfoAdmin(admin.ModelAdmin):
-    list_display = ("name", "owner", "geometry_type", "feature_count", "created_at")
+    list_display = ("name", "owner", "group", "geometry_type", "feature_count", "created_at")
     list_filter = ("geometry_type",)
-    search_fields = ("name", "table_name", "owner__username")
-    readonly_fields = ("table_name", "schema_name", "geometry_type", "srid", "feature_count", "bounds", "attribute_schema")
+    list_select_related = ("owner", "group")
+    search_fields = ("name", "table_name", "owner__username", "group__name")
+    readonly_fields = (
+        "table_name", "schema_name", "geometry_type", "srid", "feature_count",
+        "bounds", "attribute_schema", "group", "source_filename",
+    )
     inlines = [LayerShareInline]
 
 

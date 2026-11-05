@@ -323,7 +323,36 @@ function renderAvailableLayers() {
     return;
   }
 
-  container.innerHTML = remaining.map((l) => `
+  // KML/KMZ uploads share a group id — offer one "Add group" control plus per-layer Add.
+  const groups = new Map();
+  remaining.forEach((layer) => {
+    const groupId = layer.group || layer.group_detail?.id;
+    if (!groupId) return;
+    if (!groups.has(String(groupId))) {
+      groups.set(String(groupId), {
+        id: groupId,
+        name: layer.group_detail?.name || "KML/KMZ group",
+        format: String(layer.group_detail?.source_format || "").toUpperCase(),
+        layers: [],
+      });
+    }
+    groups.get(String(groupId)).layers.push(layer);
+  });
+
+  const groupBlocks = [...groups.values()]
+    .filter((g) => g.layers.length > 1)
+    .map((g) => {
+      const label = g.format ? `${g.format}: ${g.name}` : g.name;
+      return `
+      <div class="add-layer-item add-layer-group">
+        <span class="layer-type-icon">${geometryIcon("MultiPolygon")}</span>
+        <span class="layer-name" title="${Auth.escapeHtml(label)}">${Auth.escapeHtml(label)} (${g.layers.length})</span>
+        <button type="button" class="btn btn-sm btn-primary" data-add-group="${g.id}">Add all</button>
+      </div>`;
+    })
+    .join("");
+
+  const layerBlocks = remaining.map((l) => `
     <div class="add-layer-item">
       <span class="layer-type-icon">${geometryIcon(l.geometry_type || "")}</span>
       <span class="layer-name" title="${Auth.escapeHtml(l.name)}">${Auth.escapeHtml(l.name)}</span>
@@ -331,8 +360,13 @@ function renderAvailableLayers() {
     </div>
   `).join("");
 
+  container.innerHTML = groupBlocks + layerBlocks;
+
   container.querySelectorAll("[data-add-layer]").forEach((btn) => {
     btn.addEventListener("click", () => addLayerToMap(btn.dataset.addLayer));
+  });
+  container.querySelectorAll("[data-add-group]").forEach((btn) => {
+    btn.addEventListener("click", () => addGroupToMap(btn.dataset.addGroup));
   });
 }
 
@@ -351,6 +385,21 @@ async function addLayerToMap(layerId) {
   await refreshAfterLayerChange();
   fitMapToLayers({ preferLayerId: layerId });
   window.setTimeout(() => fitMapToLayers({ preferLayerId: layerId, animate: true }), 400);
+}
+
+async function addGroupToMap(groupId) {
+  const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/`, {
+    method: "POST",
+    body: { group: groupId },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    alert(body.detail || "Could not add KML/KMZ group to map.");
+    return;
+  }
+  await refreshAfterLayerChange();
+  fitMapToLayers();
+  window.setTimeout(() => fitMapToLayers({ animate: true }), 400);
 }
 
 async function removeMapLayer(mapLayerId) {

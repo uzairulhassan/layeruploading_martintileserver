@@ -23,7 +23,7 @@
       </div>
       <div class="page-hero-copy">
         <h1>Layers</h1>
-        <p class="lede">Upload shapefiles, style them, and share with your team.</p>
+        <p class="lede">Upload shapefiles or KML/KMZ, style them, and share with your team.</p>
       </div>
     </div>
 
@@ -55,7 +55,7 @@
           <path d="M12 16V7M12 7l-3.5 3.5M12 7l3.5 3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M5 16.5V18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
         </svg>
-        Upload shapefile
+        Upload layer
       </button>
     </div>
   </section>
@@ -84,8 +84,8 @@
 <div id="upload-modal" class="modal-backdrop hidden">
   <div class="modal" role="dialog" aria-labelledby="upload-modal-title">
     <div class="modal-header">
-      <h2 id="upload-modal-title">Upload shapefile</h2>
-      <p class="modal-sub">Import a .zip containing .shp / .shx / .dbf / .prj.</p>
+      <h2 id="upload-modal-title">Upload layer</h2>
+      <p class="modal-sub">Shapefile .zip (.shp / .shx / .dbf / .prj), or a .kml / .kmz file. KML/KMZ mixes are split into one layer per geometry type.</p>
     </div>
     <form id="upload-form" class="modal-form">
       <div class="form-group">
@@ -97,8 +97,8 @@
         <textarea id="upload-description" rows="2"></textarea>
       </div>
       <div class="form-group">
-        <label for="upload-file">Shapefile (.zip)</label>
-        <input type="file" id="upload-file" accept=".zip" required>
+        <label for="upload-file">File (.zip, .kml, .kmz)</label>
+        <input type="file" id="upload-file" accept=".zip,.kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" required>
       </div>
       <div id="upload-error" class="error-text hidden" role="alert"></div>
       <div class="modal-actions">

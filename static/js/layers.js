@@ -34,10 +34,18 @@ async function loadLayers() {
   renderLayers();
 }
 
+function groupBadge(layer) {
+  const group = layer.group_detail;
+  if (!group) return "";
+  const fmt = String(group.source_format || "").toUpperCase();
+  const label = fmt ? `${fmt} group` : "Group";
+  return `<span class="badge badge-access" title="${Auth.escapeHtml(group.name || "KML/KMZ group")}">${Auth.escapeHtml(label)}</span>`;
+}
+
 function renderLayers() {
   const tbody = document.getElementById("layers-tbody");
   if (!CURRENT_LAYERS.length) {
-    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><strong>No layers yet</strong>Upload a shapefile to get started.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><strong>No layers yet</strong>Upload a shapefile (.zip) or KML/KMZ to get started.</div></td></tr>`;
     return;
   }
   tbody.innerHTML = CURRENT_LAYERS.map((layer) => {
@@ -49,6 +57,7 @@ function renderLayers() {
         <div class="cell-entity">
           <span class="cell-icon tone-${meta.tone}" aria-hidden="true">${LAYER_ICONS[meta.icon]}</span>
           <span class="cell-entity-name">${Auth.escapeHtml(layer.name)}</span>
+          ${groupBadge(layer)}
         </div>
       </td>
       <td>
@@ -127,13 +136,23 @@ document.getElementById("upload-form").addEventListener("submit", async (event) 
 
   try {
     const res = await Auth.apiFetch("/api/layers/", { method: "POST", body: formData });
+    const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || JSON.stringify(body));
     }
     document.getElementById("upload-form").reset();
     Auth.closeModal("upload-modal");
     await loadLayers();
+    // KML/KMZ returns { group: {...} }; shapefile returns a single LayerInfo.
+    if (body.group) {
+      const count = body.group.layer_count ?? (body.group.layers || []).length;
+      const fmt = String(body.group.source_format || "KML").toUpperCase();
+      if (typeof Toast !== "undefined" && Toast.success) {
+        Toast.success(`${fmt} imported as ${count} layer${count === 1 ? "" : "s"}.`);
+      }
+    } else if (typeof Toast !== "undefined" && Toast.success) {
+      Toast.success("Shapefile imported.");
+    }
   } catch (err) {
     errorBox.textContent = err.message;
     errorBox.classList.remove("hidden");
