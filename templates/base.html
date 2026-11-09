@@ -24,14 +24,8 @@
   <div class="app-shell">
     {% if request.resolver_match.url_name != 'map_builder' %}
     <aside class="sidebar" aria-label="Primary">
-      <a class="brand" href="{% url 'core:dashboard' %}">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 32 32" fill="none">
-            <path d="M16 2.5c-5.1 0-9.25 4.1-9.25 9.15 0 6.55 7.4 15.9 8.7 17.5a.75.75 0 0 0 1.1 0c1.3-1.6 8.7-10.95 8.7-17.5C25.25 6.6 21.1 2.5 16 2.5Z" fill="currentColor"/>
-            <circle cx="16" cy="11.5" r="3.35" fill="#fff"/>
-          </svg>
-        </span>
-        <span class="brand-text">GeoTrak Layers</span>
+      <a class="brand" href="{% url 'core:dashboard' %}" aria-label="GeoTrak Layers">
+        {% include "includes/brand_logo.html" %}
       </a>
 
       <nav class="sidebar-nav" aria-label="Main">

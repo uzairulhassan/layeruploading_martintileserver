@@ -383,42 +383,50 @@ body:has(.auth-page) .toast-host {
 }
 
 .brand {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 0.7rem;
-  padding: 0.2rem 0.45rem;
-  color: var(--navy);
+  justify-content: center;
+  align-self: stretch;
+  padding: 0.35rem 0.25rem 0.15rem;
   text-decoration: none;
   min-width: 0;
 }
 
 .brand:hover {
-  color: var(--navy);
   text-decoration: none;
 }
 
-.brand-mark {
-  display: inline-flex;
-  width: 1.85rem;
-  height: 1.85rem;
-  flex-shrink: 0;
-  color: var(--accent);
+/* GeoTrak Layers wordmark — colour on light chrome, white on dark. */
+.brand-logo {
+  display: block;
+  width: auto;
+  height: 2.15rem;
+  max-width: min(11.5rem, 100%);
+  object-fit: contain;
+  object-position: center;
 }
 
-.brand-mark svg {
+.brand-logo--white {
+  display: none;
+}
+
+.sidebar .brand-logo {
   width: 100%;
-  height: 100%;
+  height: 2.85rem;
+  max-width: 100%;
 }
 
-.brand-text {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.02rem;
-  letter-spacing: -0.03em;
-  line-height: 1.15;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Dark chrome: midnight sidebar + midnight/graphite map-builder topbar. */
+html[data-theme="midnight"] .sidebar .brand-logo--colour,
+html[data-theme="midnight"] .builder-brand .brand-logo--colour,
+html[data-theme="graphite"] .builder-brand .brand-logo--colour {
+  display: none;
+}
+
+html[data-theme="midnight"] .sidebar .brand-logo--white,
+html[data-theme="midnight"] .builder-brand .brand-logo--white,
+html[data-theme="graphite"] .builder-brand .brand-logo--white {
+  display: block;
 }
 
 .sidebar-nav {
@@ -1683,18 +1691,14 @@ body:not(.has-app-shell) .page.auth-page {
   animation: auth-rise 0.55s ease both;
 }
 
-.auth-brand-mark {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: clamp(2.1rem, 5.5vw, 2.75rem);
-  letter-spacing: -0.04em;
-  line-height: 1.05;
-  color: #ffffff;
+.auth-brand .brand-logo {
+  height: clamp(3.4rem, 9vw, 4.35rem);
+  max-width: min(18rem, 86vw);
+  margin: 0 auto;
 }
 
 .auth-brand-tag {
-  margin: 0.45rem 0 0;
+  margin: 0.55rem 0 0;
   font-size: 0.84rem;
   font-weight: 400;
   color: rgba(255, 255, 255, 0.68);
@@ -2867,36 +2871,17 @@ html[data-theme="graphite"] .builder-topbar {
 .builder-brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
-  color: var(--navy);
   text-decoration: none;
   min-width: 0;
 }
 
 .builder-brand:hover {
   text-decoration: none;
-  color: var(--accent);
 }
 
-.builder-brand-mark {
-  display: inline-flex;
-  width: 1.55rem;
-  height: 1.55rem;
-  color: var(--accent);
-  flex-shrink: 0;
-}
-
-.builder-brand-mark svg {
-  width: 100%;
-  height: 100%;
-}
-
-.builder-brand-text {
-  font-family: var(--font-display);
-  font-size: 1.05rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  white-space: nowrap;
+.builder-brand .brand-logo {
+  height: 1.95rem;
+  max-width: min(10.75rem, 42vw);
 }
 
 .builder-topbar-end {
@@ -3855,8 +3840,9 @@ html[data-theme="graphite"] .builder-topbar {
     padding: 0 0.85rem;
   }
 
-  .builder-brand-text {
-    font-size: 0.95rem;
+  .builder-brand .brand-logo {
+    height: 1.75rem;
+    max-width: min(9.5rem, 46vw);
   }
 
   .builder-topbar-end .profile-meta-email {
