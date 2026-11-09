@@ -31,10 +31,6 @@ function setHidden(el, hidden) {
   el.classList.toggle("hidden", !!hidden);
 }
 
-function sourceLayerName(layer) {
-  return layer.source_layer;
-}
-
 function geometryIcon(geomType) {
   if (geomType === "Point" || geomType === "MultiPoint") return ICON_POINT;
   if (geomType === "LineString" || geomType === "MultiLineString") return ICON_LINE;
@@ -697,7 +693,7 @@ function addMapboxLayer(mapLayer) {
   if (!layer?.xyz_url) return;
 
   const sourceId = `src-${layer.id}`;
-  const tableName = sourceLayerName(layer);
+  const tableName = layer.source_layer;
   if (!tableName) return;
 
   if (GL_MAP.getSource(sourceId)) GL_MAP.removeSource(sourceId);
@@ -709,97 +705,15 @@ function addMapboxLayer(mapLayer) {
     maxzoom: 22,
   });
 
-  const style = { ...(layer.style || {}), ...(mapLayer.style_override || {}) };
   const visibility = mapLayer.visible ? "visible" : "none";
   const geomType = layer.geometry_type || "";
-  // KML/KMZ layers keep each feature's own colour (kml_color / kml_stroke / kml_width,
-  // alpha included) until the user picks a single colour. Mirrors apps/layers/share_style.py.
-  const useSource = !!style.useSourceColors;
-  const styleOpacity = useSource ? 1 : style.opacity;
-  const featureColor = (column, fallback) =>
-    useSource ? ["to-color", ["get", column], fallback] : fallback;
-  const featureWidth = (fallback) =>
-    useSource ? ["case", ["has", "kml_width"], ["to-number", ["get", "kml_width"]], fallback] : fallback;
-
-  if (geomType === "Point" || geomType === "MultiPoint") {
-    const id = `layer-${mapLayer.id}-circle`;
-    GL_MAP.addLayer({
-      id, source: sourceId, "source-layer": tableName, type: "circle",
-      layout: { visibility },
-      paint: {
-        "circle-color": featureColor("kml_color", style.color || "#0F2D53"),
-        "circle-radius": 5,
-        "circle-stroke-color": style.strokeColor || "#0a2140",
-        "circle-stroke-width": style.strokeWidth ?? 1,
-        "circle-opacity": mapLayer.opacity ?? styleOpacity ?? 0.8,
-      },
-    });
-    ADDED_MAPBOX_LAYER_IDS.push(id);
-  } else if (geomType === "LineString" || geomType === "MultiLineString") {
-    const id = `layer-${mapLayer.id}-line`;
-    GL_MAP.addLayer({
-      id, source: sourceId, "source-layer": tableName, type: "line",
-      layout: { visibility },
-      paint: {
-        "line-color": featureColor("kml_color", style.color || "#0F2D53"),
-        "line-width": featureWidth(style.strokeWidth ?? 2),
-        "line-opacity": mapLayer.opacity ?? styleOpacity ?? 1,
-      },
-    });
-    ADDED_MAPBOX_LAYER_IDS.push(id);
-  } else {
-    const id = `layer-${mapLayer.id}-fill`;
-    const outlineId = `layer-${mapLayer.id}-outline`;
-    GL_MAP.addLayer({
-      id, source: sourceId, "source-layer": tableName, type: "fill",
-      layout: { visibility },
-      paint: {
-        "fill-color": featureColor("kml_color", style.color || "#0F2D53"),
-        "fill-opacity": mapLayer.opacity ?? styleOpacity ?? 0.6,
-      },
-    });
-    GL_MAP.addLayer({
-      id: outlineId, source: sourceId, "source-layer": tableName, type: "line",
-      layout: { visibility },
-      paint: {
-        "line-color": featureColor("kml_stroke", style.strokeColor || "#0a2140"),
-        "line-width": featureWidth(style.strokeWidth ?? 1),
-      },
-    });
-    ADDED_MAPBOX_LAYER_IDS.push(id, outlineId);
-
-    if (geomType === "Geometry" || !geomType) {
-      const lineId = `layer-${mapLayer.id}-line-fallback`;
-      GL_MAP.addLayer({
-        id: lineId, source: sourceId, "source-layer": tableName, type: "line",
-        layout: { visibility },
-        paint: {
-          "line-color": style.color || "#0F2D53",
-          "line-width": style.strokeWidth ?? 2,
-          "line-opacity": mapLayer.opacity ?? style.opacity ?? 1,
-        },
-      });
-      ADDED_MAPBOX_LAYER_IDS.push(lineId);
-    }
-  }
+  (mapLayer.style_layers || []).forEach((styleLayer) => {
+    if (!styleLayer?.id) return;
+    GL_MAP.addLayer(styleLayer);
+    ADDED_MAPBOX_LAYER_IDS.push(styleLayer.id);
+  });
 
   addInvisibleHitLayers(mapLayer, sourceId, tableName, geomType, visibility);
-
-  const labelConfig = layer.label_config || {};
-  if (labelConfig.field) {
-    const labelId = `layer-${mapLayer.id}-label`;
-    GL_MAP.addLayer({
-      id: labelId, source: sourceId, "source-layer": tableName, type: "symbol",
-      layout: {
-        visibility,
-        "text-field": ["get", labelConfig.field],
-        "text-size": labelConfig.size || 12,
-        "text-anchor": "top",
-      },
-      paint: { "text-color": labelConfig.color || "#0F2D53" },
-    });
-    ADDED_MAPBOX_LAYER_IDS.push(labelId);
-  }
 }
 
 async function saveMapMeta() {

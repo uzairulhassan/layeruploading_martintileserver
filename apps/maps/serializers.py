@@ -5,28 +5,49 @@ from rest_framework import serializers
 from apps.accounts.serializers import UserSummarySerializer
 from apps.layers.models import LayerGroup, LayerInfo
 from apps.layers.serializers import LayerInfoSerializer
+from apps.layers.share_style import build_layer_paint_layers
 
 from .models import MapLayer, MapProject, MapShare, MapShareLink
 
 
 class MapLayerSerializer(serializers.ModelSerializer):
     layer_detail = LayerInfoSerializer(source="layer", read_only=True)
+    style_layers = serializers.SerializerMethodField()
 
     class Meta:
         model = MapLayer
-        fields = ["id", "layer", "layer_detail", "order", "visible", "opacity", "style_override"]
-        read_only_fields = ["id"]
+        fields = [
+            "id",
+            "layer",
+            "layer_detail",
+            "order",
+            "visible",
+            "opacity",
+            "style_override",
+            "style_layers",
+        ]
+        read_only_fields = ["id", "style_layers"]
+
+    def get_style_layers(self, obj):
+        layers, _needs_glyphs = build_layer_paint_layers(
+            layer=obj.layer,
+            source_id=f"src-{obj.layer_id}",
+            style=obj.style_override or {},
+            opacity=obj.opacity,
+            visibility="visible" if obj.visible else "none",
+            id_prefix=f"layer-{obj.id}",
+        )
+        return layers
 
 
 class MapShareSerializer(serializers.ModelSerializer):
     shared_with_detail = UserSummarySerializer(source="shared_with", read_only=True)
-    shared_by_detail = UserSummarySerializer(source="shared_by", read_only=True)
 
     class Meta:
         model = MapShare
         fields = [
             "id", "map", "shared_with", "shared_with_detail",
-            "shared_by_detail", "permission", "created_at",
+            "permission", "created_at",
         ]
         read_only_fields = ["id", "created_at"]
         extra_kwargs = {"map": {"write_only": True}}

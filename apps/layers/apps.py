@@ -6,3 +6,6 @@ class LayersConfig(AppConfig):
     name = "apps.layers"
     label = "layers"
     verbose_name = "Layers"
+
+    def ready(self):
+        from . import signals  # noqa: F401

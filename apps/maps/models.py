@@ -114,10 +114,6 @@ class MapShareLink(models.Model):
             return False
         return timezone.now() >= self.expires_at
 
-    @property
-    def is_active(self) -> bool:
-        return not self.is_blocked and not self.is_expired
-
 
 class MapShareLinkUsage(models.Model):
     """Per-day tile request counter for one map share link (one upsert per tile)."""

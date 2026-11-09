@@ -143,3 +143,36 @@ class MapShareLinkApiTests(TestCase):
         self.client.force_authenticate(self.other)
         res = self.client.post(f"/api/maps/{self.map.id}/share-links/", {}, format="json")
         self.assertIn(res.status_code, (403, 404))
+
+
+class MapLayerStyleLayersApiTests(TestCase):
+    """In-app map builder consumes ``style_layers`` from the same paint builder as shares."""
+
+    def setUp(self):
+        self.owner = get_user_model().objects.create_user("styleowner", "styleowner@example.com", "pw-12345!")
+        self.layer = LayerInfo.objects.create(
+            owner=self.owner,
+            name="Styled",
+            schema_name="layers_data",
+            table_name="layer_" + "f" * 32,
+            geometry_type=LayerInfo.GeometryType.LINESTRING,
+            style={"color": "#112233", "opacity": 0.7, "strokeWidth": 4},
+        )
+        self.map = MapProject.objects.create(owner=self.owner, name="Style map")
+        self.map_layer = MapLayer.objects.create(
+            map=self.map, layer=self.layer, order=0, visible=True, opacity=0.5
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def test_map_payload_includes_server_built_style_layers(self):
+        body = self.client.get(f"/api/maps/{self.map.id}/").json()
+        map_layer = body["map_layers"][0]
+        self.assertTrue(map_layer["style_layers"])
+        line = map_layer["style_layers"][0]
+        self.assertEqual(line["id"], f"layer-{self.map_layer.id}-line")
+        self.assertEqual(line["source"], f"src-{self.layer.id}")
+        self.assertEqual(line["source-layer"], self.layer.table_name)
+        self.assertEqual(line["paint"]["line-color"], "#112233")
+        self.assertEqual(line["paint"]["line-opacity"], 0.5)
+        self.assertEqual(line["paint"]["line-width"], 4)

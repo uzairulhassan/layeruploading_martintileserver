@@ -105,8 +105,8 @@ def feature_columns(style: str | None, family: str) -> dict:
 def layer_style(style: str | None, family: str, *, use_source_colors: bool) -> dict:
     """Seed ``LayerInfo.style`` from the layer's most common KML style.
 
-    The keys are the ones the style editor and map builder already use, so the
-    user can change them like any other layer. ``useSourceColors`` tells the map
+    The keys match the style editor and ``share_style`` paint builder, so the
+    user can change them like any other layer. ``useSourceColors`` tells paint
     to draw each feature in its own KML colour, falling back to ``color``.
     """
     color, stroke, width = _family_parts(parse_ogr_style(style), family)

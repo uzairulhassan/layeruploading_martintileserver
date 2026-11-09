@@ -31,12 +31,12 @@ from . import kml_style
 from .models import LayerGroup, LayerInfo
 from .services import (
     LayerImportError,
-    _drop_table,
     _ensure_schema_exists,
     _ensure_spatial_index,
     _generate_table_name,
     _introspect_table,
     _pg_connection_string,
+    drop_layer_table,
     run_ogr2ogr,
 )
 
@@ -248,7 +248,7 @@ def import_kml(*, owner, name: str, description: str, uploaded_file) -> LayerGro
                 staging=staging,
             )
         finally:
-            _drop_table(schema, staging)
+            drop_layer_table(schema, staging)
 
 
 def _build_group(*, owner, name, description, filename, source_format, schema, staging) -> LayerGroup:

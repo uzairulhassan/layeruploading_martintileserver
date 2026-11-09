@@ -2,10 +2,12 @@
 
 Shapefile (.zip with .shp/.shx/.dbf/.prj) import lives here. KML/KMZ splitting
 lives in ``kml_import`` and reuses these helpers (ogr2ogr runner, table naming,
-introspection, drop/delete). Every imported table sits in ``LAYER_TABLE_SCHEMA``
-(default ``layers_data``) and is served by Martin via
+introspection, table drop). Layer row deletes drop tables via the ``LayerInfo``
+``pre_delete`` signal (see ``signals``). Every imported table sits in
+``LAYER_TABLE_SCHEMA`` (default ``layers_data``) and is served by Martin via
 ``layers_data.geolayers_tile(?layer=<table>)`` with no catalog reload.
 """
+import shutil
 import subprocess
 import tempfile
 import uuid
@@ -45,15 +47,31 @@ def _pg_connection_string() -> str:
     return "PG:" + " ".join(parts)
 
 
-def _extract_shapefile(zip_path: Path, dest_dir: Path) -> Path:
-    with zipfile.ZipFile(zip_path) as zf:
-        for name in zf.namelist():
-            target = dest_dir / Path(name).name
-            if not str(target.resolve()).startswith(str(dest_dir.resolve())):
-                raise LayerImportError("Unsafe path found inside archive.")
-        zf.extractall(dest_dir)
+def _safe_zip_member_name(name: str) -> str:
+    """Return a flat basename for a zip entry, or raise if the path looks hostile."""
+    normalized = name.replace("\\", "/")
+    if not normalized or normalized.endswith("/"):
+        raise LayerImportError("Unsafe path found inside archive.")
+    if normalized.startswith("/") or normalized.startswith("../") or "/../" in f"/{normalized}/":
+        raise LayerImportError("Unsafe path found inside archive.")
+    basename = Path(normalized).name
+    if not basename or basename in {".", ".."}:
+        raise LayerImportError("Unsafe path found inside archive.")
+    return basename
 
-    shp_files = list(dest_dir.rglob("*.shp"))
+
+def _extract_shapefile(zip_path: Path, dest_dir: Path) -> Path:
+    """Extract shapefile sidecars into ``dest_dir`` using basenames only (no zip-slip)."""
+    with zipfile.ZipFile(zip_path) as zf:
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            # Basename-only write: archive paths cannot escape ``dest_dir``.
+            target = dest_dir / _safe_zip_member_name(info.filename)
+            with zf.open(info) as src, open(target, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+    shp_files = list(dest_dir.glob("*.shp"))
     if not shp_files:
         raise LayerImportError("Archive does not contain a .shp file.")
     if len(shp_files) > 1:
@@ -61,7 +79,7 @@ def _extract_shapefile(zip_path: Path, dest_dir: Path) -> Path:
 
     shp_path = shp_files[0]
     stem = shp_path.stem
-    present = {p.suffix.lower() for p in dest_dir.rglob(f"{stem}.*")}
+    present = {p.suffix.lower() for p in dest_dir.glob(f"{stem}.*")}
     missing = REQUIRED_SHAPEFILE_EXTENSIONS - present
     if missing:
         raise LayerImportError(f"Shapefile is missing required files: {', '.join(sorted(missing))}")
@@ -159,7 +177,8 @@ def _introspect_table(schema_name: str, table_name: str) -> dict:
     }
 
 
-def _drop_table(schema_name: str, table_name: str):
+def drop_layer_table(schema_name: str, table_name: str):
+    """Drop a PostGIS layer (or staging) table if it exists."""
     with connection.cursor() as cursor:
         cursor.execute(f'DROP TABLE IF EXISTS "{schema_name}"."{table_name}" CASCADE')
 
@@ -198,29 +217,24 @@ def import_shapefile(*, owner, name: str, description: str, uploaded_file) -> La
                 **metadata,
             )
     except Exception:
-        _drop_table(schema_name, table_name)
+        drop_layer_table(schema_name, table_name)
         raise
 
     return layer
 
 
 def delete_layer(layer: LayerInfo):
-    """Drop the layer's table and row; a KML group goes with its last layer."""
+    """Delete the layer row (signal drops its table). Empty KML groups go too."""
     group_id = layer.group_id
     with transaction.atomic():
-        _drop_table(layer.schema_name, layer.table_name)
         layer.delete()
         if group_id and not LayerInfo.objects.filter(group_id=group_id).exists():
             LayerGroup.objects.filter(pk=group_id).delete()
 
 
 def delete_layer_group(group: LayerGroup):
-    """Drop every table in a KML/KMZ group, then the group (its LayerInfo rows cascade)."""
-    with transaction.atomic():
-        # Query directly: the viewset prefetches only the layers the caller can see.
-        for layer in LayerInfo.objects.filter(group=group):
-            _drop_table(layer.schema_name, layer.table_name)
-        group.delete()
+    """Delete a KML/KMZ group; cascaded layers drop their tables via signal."""
+    group.delete()
 
 
 def sample_attribute_value(layer: LayerInfo, field_name: str) -> str | None:

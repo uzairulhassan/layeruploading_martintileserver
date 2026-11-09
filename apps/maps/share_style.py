@@ -1,9 +1,10 @@
 """Build a Mapbox Style Spec for an externally shared map composition.
 
-Tiles stay raw MVT per layer; this document mirrors the map builder: basemap
-(free OSM so MapLibre clients need no Mapbox token), viewport, layer order,
-visibility, opacity and style overrides. Style is read live from the map so
-edits propagate without recreating the share link.
+Tiles stay raw MVT per layer. Paint comes from ``build_layer_paint_layers``
+(same source as the in-app map builder). Includes a free OSM basemap so
+MapLibre clients need no Mapbox token, plus viewport, order, visibility,
+opacity and style overrides. Style is read live so edits propagate without
+recreating the share link.
 """
 from __future__ import annotations
 

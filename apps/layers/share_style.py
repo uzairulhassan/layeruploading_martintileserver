@@ -1,12 +1,12 @@
 """Build Mapbox Style Spec paint/layout for GeoLayers layers.
 
-Used by single-layer external share (``/x/<token>/style.json``) and by map
-external share (``/m/<token>/style.json``) so both stay visually in sync with
-the in-app map builder.
+Single source of truth for:
+* Layer URL ``/x/<token>/style.json``
+* Map URL ``/m/<token>/style.json``
+* In-app map builder via ``MapLayerSerializer.style_layers``
 """
 from __future__ import annotations
 
-from .geometry_hints import SUGGESTED_GEOMETRY
 from .models import LayerInfo
 
 # Free public glyphs so symbol (label) layers work without a Mapbox token.
@@ -14,6 +14,16 @@ MAPLIBRE_GLYPHS = "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf"
 _DEFAULT_COLOR = "#0F2D53"
 _DEFAULT_STROKE = "#0a2140"
 _SOURCE_ID = "geolayers"
+
+# PostGIS / LayerInfo geometry → MapLibre paint kind (share metadata only).
+_SUGGESTED_GEOMETRY = {
+    LayerInfo.GeometryType.POINT: "circle",
+    LayerInfo.GeometryType.MULTIPOINT: "circle",
+    LayerInfo.GeometryType.LINESTRING: "line",
+    LayerInfo.GeometryType.MULTILINESTRING: "line",
+    LayerInfo.GeometryType.POLYGON: "fill",
+    LayerInfo.GeometryType.MULTIPOLYGON: "fill",
+}
 
 
 def _feature_color(style: dict, column: str, fallback: str):
@@ -37,21 +47,26 @@ def build_layer_paint_layers(
     label_config: dict | None = None,
     opacity: float | None = None,
     visibility: str = "visible",
+    id_prefix: str | None = None,
 ) -> tuple[list[dict], bool]:
-    """Return ``(style_layers, needs_glyphs)`` matching map_builder.js paint rules.
+    """Return ``(style_layers, needs_glyphs)`` — single paint source for shares + map builder.
 
     ``style`` / ``label_config`` default to the layer's saved values. Callers may
     pass a merged style (e.g. map ``style_override``) or a map-level opacity.
+    ``id_prefix`` defaults to the PostGIS table name (share links); the in-app map
+    builder passes ``layer-<map_layer_id>``.
     """
     style = {**(layer.style or {}), **(style or {})}
     label_config = label_config if label_config is not None else (layer.label_config or {})
     table = layer.table_name
+    prefix = id_prefix or table
     geom = layer.geometry_type or ""
     color = style.get("color") or _DEFAULT_COLOR
     stroke_color = style.get("strokeColor") or _DEFAULT_STROKE
     stroke_width = style.get("strokeWidth")
     # Map-level opacity wins when provided; otherwise layer style opacity. KML colours
-    # already carry their own alpha, so don't apply the layer opacity on top of them.
+    # already carry their own alpha, so don't apply the layer opacity on top of them
+    # unless the map explicitly sets opacity.
     if opacity is not None:
         layer_opacity = opacity
     elif style.get("useSourceColors"):
@@ -66,7 +81,7 @@ def build_layer_paint_layers(
     if geom in (LayerInfo.GeometryType.POINT, LayerInfo.GeometryType.MULTIPOINT):
         layers.append(
             {
-                "id": f"{table}-circle",
+                "id": f"{prefix}-circle",
                 "type": "circle",
                 "source": source_id,
                 "source-layer": table,
@@ -83,7 +98,7 @@ def build_layer_paint_layers(
     elif geom in (LayerInfo.GeometryType.LINESTRING, LayerInfo.GeometryType.MULTILINESTRING):
         layers.append(
             {
-                "id": f"{table}-line",
+                "id": f"{prefix}-line",
                 "type": "line",
                 "source": source_id,
                 "source-layer": table,
@@ -98,7 +113,7 @@ def build_layer_paint_layers(
     else:
         layers.append(
             {
-                "id": f"{table}-fill",
+                "id": f"{prefix}-fill",
                 "type": "fill",
                 "source": source_id,
                 "source-layer": table,
@@ -111,7 +126,7 @@ def build_layer_paint_layers(
         )
         layers.append(
             {
-                "id": f"{table}-outline",
+                "id": f"{prefix}-outline",
                 "type": "line",
                 "source": source_id,
                 "source-layer": table,
@@ -125,7 +140,7 @@ def build_layer_paint_layers(
         if geom in (LayerInfo.GeometryType.GEOMETRY, ""):
             layers.append(
                 {
-                    "id": f"{table}-line-fallback",
+                    "id": f"{prefix}-line-fallback",
                     "type": "line",
                     "source": source_id,
                     "source-layer": table,
@@ -143,7 +158,7 @@ def build_layer_paint_layers(
     if label_field:
         layers.append(
             {
-                "id": f"{table}-label",
+                "id": f"{prefix}-label",
                 "type": "symbol",
                 "source": source_id,
                 "source-layer": table,
@@ -182,7 +197,7 @@ def build_share_style(*, layer: LayerInfo, tiles_url: str) -> dict:
         "metadata": {
             "geolayers:source_layer": table,
             "geolayers:geometry_type": geom,
-            "geolayers:suggested_geometry": SUGGESTED_GEOMETRY.get(geom, "line"),
+            "geolayers:suggested_geometry": _SUGGESTED_GEOMETRY.get(geom, "line"),
             "geolayers:style": style,
             "geolayers:label_config": label_config,
             "geolayers:attribute_schema": layer.attribute_schema or [],

@@ -161,10 +161,6 @@ class LayerShareLink(models.Model):
             return False
         return timezone.now() >= self.expires_at
 
-    @property
-    def is_active(self) -> bool:
-        return not self.is_blocked and not self.is_expired
-
 
 class LayerShareLinkUsage(models.Model):
     """Per-day tile request counter for one share link (one upsert per tile)."""
