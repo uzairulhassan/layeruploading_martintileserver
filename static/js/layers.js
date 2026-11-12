@@ -235,6 +235,89 @@ function stylePreviewKind(geometryType) {
 let STYLE_LABEL_SAMPLE = "";
 let STYLE_LABEL_SAMPLE_FIELD = "";
 let STYLE_LABEL_SAMPLE_REQ = 0;
+let STYLE_COLOR_BY_REQ = 0;
+let STYLE_ICON_BY_REQ = 0;
+let STYLE_ACTIVE_LAYER = null;
+let STYLE_COLOR_CATEGORIES = {};
+let STYLE_ICON_CATEGORIES = {};
+
+const CATEGORY_PALETTE = [
+  "#2563eb", "#16a34a", "#ea580c", "#dc2626", "#7c3aed",
+  "#0891b2", "#ca8a04", "#db2777", "#4f46e5", "#059669",
+  "#9333ea", "#0d9488", "#c2410c", "#be123c", "#1d4ed8",
+];
+
+// Catalog lives in geolayers_icons.js (loaded before this file on the layers page).
+const STYLE_ICON_OPTIONS = window.GeoLayersIcons?.ICON_OPTIONS || [
+  { id: "gl-poi", label: "Pin" },
+  { id: "gl-station", label: "Station" },
+  { id: "gl-underground", label: "Underground" },
+  { id: "gl-elevated", label: "Elevated" },
+  { id: "gl-bus", label: "Bus" },
+  { id: "gl-metro", label: "Metro" },
+  { id: "gl-square", label: "Square" },
+  { id: "gl-triangle", label: "Triangle" },
+  { id: "gl-diamond", label: "Diamond" },
+];
+
+function fieldOptionsHtml(fields, selected, emptyLabel) {
+  return `<option value="">${Auth.escapeHtml(emptyLabel)}</option>` +
+    fields.map((f) => {
+      const sel = f === selected ? " selected" : "";
+      return `<option value="${Auth.escapeHtml(f)}"${sel}>${Auth.escapeHtml(f)}</option>`;
+    }).join("");
+}
+
+function iconOptionsHtml(selected) {
+  return STYLE_ICON_OPTIONS.map((opt) => {
+    const sel = opt.id === selected ? " selected" : "";
+    return `<option value="${Auth.escapeHtml(opt.id)}"${sel}>${Auth.escapeHtml(opt.label)}</option>`;
+  }).join("");
+}
+
+function readColorByFromDom() {
+  const field = document.getElementById("style-color-by-field")?.value || "";
+  if (!field) return null;
+  const container = document.getElementById("style-color-by-rows");
+  const keys = container?._categoryKeys || Object.keys(STYLE_COLOR_CATEGORIES);
+  const categories = {};
+  keys.forEach((key, idx) => {
+    const row = container?.querySelector(`[data-category-index="${idx}"]`);
+    const input = row?.querySelector("input[data-color-text]");
+    const picker = row?.querySelector("input[type=color]");
+    const raw = input?.value || picker?.value || STYLE_COLOR_CATEGORIES[key] || "#888888";
+    categories[key] = normalizeHexColor(raw, "#888888");
+  });
+  if (!Object.keys(categories).length) Object.assign(categories, STYLE_COLOR_CATEGORIES);
+  return {
+    field,
+    default: normalizeHexColor(document.getElementById("style-fill-color").value, "#0F2D53"),
+    categories,
+  };
+}
+
+function readMarkerFromDom() {
+  const markerPanel = document.getElementById("style-marker-panel");
+  if (!markerPanel || markerPanel.classList.contains("hidden")) return null;
+  if ((document.getElementById("style-marker-type")?.value || "circle") !== "icon") return null;
+
+  const defaultIcon = document.getElementById("style-default-icon")?.value || "gl-poi";
+  const field = document.getElementById("style-icon-by-field")?.value || "";
+  const marker = { type: "icon", icon: defaultIcon };
+  if (!field) return marker;
+
+  const container = document.getElementById("style-icon-by-rows");
+  const keys = container?._iconKeys || Object.keys(STYLE_ICON_CATEGORIES);
+  const categories = {};
+  keys.forEach((key, idx) => {
+    const row = container?.querySelector(`[data-icon-index="${idx}"]`);
+    const select = row?.querySelector("select");
+    categories[key] = select?.value || STYLE_ICON_CATEGORIES[key] || defaultIcon;
+  });
+  if (!Object.keys(categories).length) Object.assign(categories, STYLE_ICON_CATEGORIES);
+  marker.iconBy = { field, default: defaultIcon, categories };
+  return marker;
+}
 
 function readStyleFormValues() {
   return {
@@ -242,10 +325,169 @@ function readStyleFormValues() {
     strokeColor: normalizeHexColor(document.getElementById("style-stroke-color").value, "#0a2140"),
     strokeWidth: Math.max(0, parseFloat(document.getElementById("style-stroke-width").value || "1") || 0),
     opacity: Math.min(1, Math.max(0, parseFloat(document.getElementById("style-opacity").value || "0.6") || 0)),
+    colorBy: readColorByFromDom(),
+    marker: readMarkerFromDom(),
     labelField: document.getElementById("label-field").value,
     labelColor: normalizeHexColor(document.getElementById("label-color").value, "#0F2D53"),
     labelSize: Math.min(36, Math.max(8, parseInt(document.getElementById("label-size").value || "12", 10) || 12)),
   };
+}
+
+async function fetchDistinctAttributeValues(layerId, field) {
+  const res = await Auth.apiFetch(
+    `/api/layers/${layerId}/attribute-values/?field=${encodeURIComponent(field)}&limit=40`
+  );
+  if (!res.ok) return null;
+  const body = await res.json().catch(() => ({}));
+  return Array.isArray(body.values) ? body.values : [];
+}
+
+function renderColorByRows(values, categories) {
+  const container = document.getElementById("style-color-by-rows");
+  if (!container) return;
+  const keys = values || [];
+  if (!keys.length) {
+    container.innerHTML = `<p class="style-panel-hint">No distinct values found for this field.</p>`;
+    container.classList.remove("hidden");
+    return;
+  }
+  STYLE_COLOR_CATEGORIES = {};
+  container.innerHTML = keys.map((key, idx) => {
+    const color = normalizeHexColor(categories[key], CATEGORY_PALETTE[idx % CATEGORY_PALETTE.length]);
+    STYLE_COLOR_CATEGORIES[key] = color;
+    const safe = Auth.escapeHtml(key);
+    const id = `color-by-${idx}`;
+    return `
+      <div class="style-category-row" data-category-index="${idx}">
+        <label for="${id}" title="${safe}">${safe}</label>
+        <div class="color-field">
+          <input type="color" id="${id}-picker" value="${color}" aria-label="Color for ${safe}">
+          <input type="text" id="${id}" data-color-text value="${color}" spellcheck="false">
+        </div>
+      </div>`;
+  }).join("");
+  container.classList.remove("hidden");
+  keys.forEach((key, idx) => {
+    const id = `color-by-${idx}`;
+    bindColorPair(id, `${id}-picker`, STYLE_COLOR_CATEGORIES[key], () => {
+      const text = document.getElementById(id);
+      STYLE_COLOR_CATEGORIES[key] = normalizeHexColor(text?.value, STYLE_COLOR_CATEGORIES[key]);
+      updateStylePreview();
+    });
+  });
+  container._categoryKeys = keys;
+}
+
+function renderIconByRows(values, categories, defaultIcon) {
+  const container = document.getElementById("style-icon-by-rows");
+  if (!container) return;
+  const keys = values || [];
+  if (!keys.length) {
+    container.innerHTML = `<p class="style-panel-hint">No distinct values found for this field.</p>`;
+    container.classList.remove("hidden");
+    return;
+  }
+  STYLE_ICON_CATEGORIES = {};
+  container.innerHTML = keys.map((key, idx) => {
+    const icon = categories[key] || defaultIcon || "gl-poi";
+    STYLE_ICON_CATEGORIES[key] = icon;
+    const safe = Auth.escapeHtml(key);
+    const id = `icon-by-${idx}`;
+    return `
+      <div class="style-category-row" data-icon-index="${idx}">
+        <label for="${id}" title="${safe}">${safe}</label>
+        <select id="${id}" aria-label="Icon for ${safe}">${iconOptionsHtml(icon)}</select>
+      </div>`;
+  }).join("");
+  container.classList.remove("hidden");
+  container._iconKeys = keys;
+  container.querySelectorAll("select").forEach((select) => {
+    select.addEventListener("change", () => {
+      const row = select.closest("[data-icon-index]");
+      const idx = Number(row?.dataset.iconIndex);
+      const key = keys[idx];
+      if (key) STYLE_ICON_CATEGORIES[key] = select.value;
+      updateStylePreview();
+    });
+  });
+}
+
+function clearCategoryRows(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = "";
+  container.classList.add("hidden");
+  delete container._categoryKeys;
+  delete container._iconKeys;
+}
+
+async function refreshColorByValues(preferredCategories = {}) {
+  const layerId = document.getElementById("style-id").value;
+  const field = document.getElementById("style-color-by-field")?.value || "";
+  const container = document.getElementById("style-color-by-rows");
+  const reqId = ++STYLE_COLOR_BY_REQ;
+  if (!field) {
+    STYLE_COLOR_CATEGORIES = {};
+    clearCategoryRows("style-color-by-rows");
+    updateStylePreview();
+    return;
+  }
+  if (container) {
+    container.innerHTML = `<p class="style-panel-hint">Loading values…</p>`;
+    container.classList.remove("hidden");
+  }
+  const values = await fetchDistinctAttributeValues(layerId, field);
+  if (reqId !== STYLE_COLOR_BY_REQ) return;
+  if (!values) {
+    if (container) {
+      container.innerHTML = `<p class="style-panel-hint">Could not load attribute values.</p>`;
+    }
+    return;
+  }
+  renderColorByRows(values, preferredCategories);
+  updateStylePreview();
+}
+
+async function refreshIconByValues(preferredCategories = {}) {
+  const layerId = document.getElementById("style-id").value;
+  const field = document.getElementById("style-icon-by-field")?.value || "";
+  const container = document.getElementById("style-icon-by-rows");
+  const defaultIcon = document.getElementById("style-default-icon")?.value || "gl-poi";
+  const reqId = ++STYLE_ICON_BY_REQ;
+  if (!field) {
+    STYLE_ICON_CATEGORIES = {};
+    clearCategoryRows("style-icon-by-rows");
+    updateStylePreview();
+    return;
+  }
+  if (container) {
+    container.innerHTML = `<p class="style-panel-hint">Loading values…</p>`;
+    container.classList.remove("hidden");
+  }
+  const values = await fetchDistinctAttributeValues(layerId, field);
+  if (reqId !== STYLE_ICON_BY_REQ) return;
+  if (!values) {
+    if (container) {
+      container.innerHTML = `<p class="style-panel-hint">Could not load attribute values.</p>`;
+    }
+    return;
+  }
+  renderIconByRows(values, preferredCategories, defaultIcon);
+  updateStylePreview();
+}
+
+function syncMarkerPanelVisibility(kind) {
+  const panel = document.getElementById("style-marker-panel");
+  if (!panel) return;
+  const show = kind === "point";
+  panel.classList.toggle("hidden", !show);
+  const markerType = document.getElementById("style-marker-type")?.value || "circle";
+  const showIcons = show && markerType === "icon";
+  document.getElementById("style-default-icon-wrap")?.classList.toggle("hidden", !showIcons);
+  document.getElementById("style-icon-by-wrap")?.classList.toggle("hidden", !showIcons);
+  if (!showIcons) {
+    document.getElementById("style-icon-by-rows")?.classList.add("hidden");
+  }
 }
 
 function truncatePreviewLabel(text, maxLen = 28) {
@@ -253,6 +495,13 @@ function truncatePreviewLabel(text, maxLen = 28) {
   if (!value) return "";
   if (value.length <= maxLen) return value;
   return `${value.slice(0, maxLen - 1)}…`;
+}
+
+function previewCategoryColors(values) {
+  const cats = values.colorBy?.categories || {};
+  const colors = Object.values(cats);
+  if (colors.length) return colors.slice(0, 5);
+  return [values.color];
 }
 
 function updateStylePreview() {
@@ -265,27 +514,39 @@ function updateStylePreview() {
   const kind = preview.dataset.kind || "line";
   const values = readStyleFormValues();
   const strokeWidth = Math.max(values.strokeWidth, kind === "line" ? 1 : 0);
+  const colors = previewCategoryColors(values);
 
   const labels = { point: "Point", line: "Line", fill: "Polygon" };
-  if (kindBadge) kindBadge.textContent = labels[kind] || "Layer";
+  if (kindBadge) {
+    const extra = values.colorBy?.field ? ` · by ${values.colorBy.field}` : "";
+    kindBadge.textContent = `${labels[kind] || "Layer"}${extra}`;
+  }
 
   let markup = "";
   if (kind === "point") {
-    markup = `
-      <circle cx="120" cy="64" r="12"
-        fill="${values.color}" fill-opacity="${values.opacity}"
-        stroke="${values.strokeColor}" stroke-width="${Math.max(strokeWidth, 1)}"/>
-    `;
+    const useIcon = values.marker?.type === "icon";
+    markup = colors.map((color, idx) => {
+      const cx = 40 + idx * 40;
+      if (useIcon) {
+        return `<path d="M${cx} 40 l10 8 v14 h-20 v-14 z" fill="${color}" fill-opacity="${values.opacity}"
+          stroke="${values.strokeColor}" stroke-width="1"/>`;
+      }
+      return `<circle cx="${cx}" cy="64" r="11"
+        fill="${color}" fill-opacity="${values.opacity}"
+        stroke="${values.strokeColor}" stroke-width="${Math.max(strokeWidth, 1)}"/>`;
+    }).join("");
   } else if (kind === "line") {
-    markup = `
-      <path d="M24 98 C 60 34, 96 34, 120 70 S 180 108, 216 42"
-        fill="none" stroke="${values.color}" stroke-opacity="${values.opacity}"
-        stroke-width="${Math.max(strokeWidth, 1.5)}" stroke-linecap="round" stroke-linejoin="round"/>
-    `;
+    markup = colors.map((color, idx) => {
+      const y = 36 + idx * 16;
+      return `<path d="M24 ${y + 40} C 60 ${y}, 96 ${y}, 120 ${y + 20} S 180 ${y + 50}, 216 ${y}"
+        fill="none" stroke="${color}" stroke-opacity="${values.opacity}"
+        stroke-width="${Math.max(strokeWidth, 1.5)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    }).join("");
   } else {
+    const color = colors[0] || values.color;
     markup = `
       <path d="M40 100 L82 36 L144 48 L200 30 L214 100 Z"
-        fill="${values.color}" fill-opacity="${values.opacity}"
+        fill="${color}" fill-opacity="${values.opacity}"
         stroke="${values.strokeColor}" stroke-width="${Math.max(strokeWidth, 1)}"
         stroke-linejoin="round"/>
     `;
@@ -340,6 +601,7 @@ async function refreshStyleLabelSample() {
 }
 
 function openStyleModal(layer) {
+  STYLE_ACTIVE_LAYER = layer;
   document.getElementById("style-id").value = layer.id;
 
   const kind = stylePreviewKind(layer.geometry_type);
@@ -352,10 +614,33 @@ function openStyleModal(layer) {
   document.getElementById("style-stroke-width").value = style.strokeWidth ?? 1;
   document.getElementById("style-opacity").value = style.opacity ?? 0.6;
 
+  const fields = (layer.attribute_schema || []).map((f) => f.name).filter(Boolean);
+  const colorBy = style.colorBy && typeof style.colorBy === "object" ? style.colorBy : null;
+  const colorBySelect = document.getElementById("style-color-by-field");
+  if (colorBySelect) {
+    colorBySelect.innerHTML = fieldOptionsHtml(fields, colorBy?.field || "", "None (single color)");
+  }
+
+  const marker = style.marker && typeof style.marker === "object" ? style.marker : {};
+  const markerType = document.getElementById("style-marker-type");
+  const defaultIcon = document.getElementById("style-default-icon");
+  const iconBySelect = document.getElementById("style-icon-by-field");
+  if (markerType) markerType.value = marker.type === "icon" ? "icon" : "circle";
+  if (defaultIcon) {
+    defaultIcon.innerHTML = iconOptionsHtml(marker.icon || "gl-poi");
+    defaultIcon.value = marker.icon || "gl-poi";
+  }
+  if (iconBySelect) {
+    iconBySelect.innerHTML = fieldOptionsHtml(
+      fields,
+      marker.iconBy?.field || "",
+      "Same icon for all",
+    );
+  }
+  syncMarkerPanelVisibility(kind);
+
   const labelSelect = document.getElementById("label-field");
-  const fields = (layer.attribute_schema || []).map((f) => f.name);
-  labelSelect.innerHTML = `<option value="">None</option>` +
-    fields.map((f) => `<option value="${Auth.escapeHtml(f)}">${Auth.escapeHtml(f)}</option>`).join("");
+  labelSelect.innerHTML = fieldOptionsHtml(fields, "", "None");
 
   const labelConfig = layer.label_config || {};
   labelSelect.value = labelConfig.field || "";
@@ -369,22 +654,38 @@ function openStyleModal(layer) {
 
   STYLE_LABEL_SAMPLE = "";
   STYLE_LABEL_SAMPLE_FIELD = "";
+  STYLE_COLOR_CATEGORIES = { ...(colorBy?.categories || {}) };
+  STYLE_ICON_CATEGORIES = { ...(marker.iconBy?.categories || {}) };
   updateStylePreview();
   Auth.openModal("style-modal");
   refreshStyleLabelSample();
+  refreshColorByValues(colorBy?.categories || {});
+  if (kind === "point" && marker.type === "icon" && marker.iconBy?.field) {
+    refreshIconByValues(marker.iconBy.categories || {});
+  } else {
+    document.getElementById("style-icon-by-rows")?.classList.add("hidden");
+  }
 }
 
 document.getElementById("style-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const id = document.getElementById("style-id").value;
   const values = readStyleFormValues();
+  const existingStyle = STYLE_ACTIVE_LAYER?.style || {};
+  const style = {
+    color: values.color,
+    strokeColor: values.strokeColor,
+    strokeWidth: values.strokeWidth,
+    opacity: values.opacity,
+  };
+  // Preserve KML source colours only when the user has not switched to color-by-attribute.
+  if (existingStyle.useSourceColors && !values.colorBy) {
+    style.useSourceColors = true;
+  }
+  if (values.colorBy) style.colorBy = values.colorBy;
+  if (values.marker?.type === "icon") style.marker = values.marker;
   const payload = {
-    style: {
-      color: values.color,
-      strokeColor: values.strokeColor,
-      strokeWidth: values.strokeWidth,
-      opacity: values.opacity,
-    },
+    style,
     label_config: {
       field: values.labelField,
       color: values.labelColor,
@@ -393,6 +694,7 @@ document.getElementById("style-form").addEventListener("submit", async (event) =
   };
   const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "PATCH", body: payload });
   if (res.ok) {
+    STYLE_ACTIVE_LAYER = null;
     Auth.closeModal("style-modal");
     await loadLayers();
   }
@@ -404,6 +706,23 @@ document.getElementById("style-form").addEventListener("submit", async (event) =
   el?.addEventListener("change", updateStylePreview);
 });
 document.getElementById("label-field")?.addEventListener("change", refreshStyleLabelSample);
+document.getElementById("style-color-by-field")?.addEventListener("change", () => {
+  STYLE_COLOR_CATEGORIES = {};
+  refreshColorByValues();
+});
+document.getElementById("style-marker-type")?.addEventListener("change", () => {
+  const kind = document.getElementById("style-preview")?.dataset.kind || "point";
+  syncMarkerPanelVisibility(kind);
+  if (document.getElementById("style-marker-type").value === "icon") {
+    refreshIconByValues(STYLE_ICON_CATEGORIES);
+  }
+  updateStylePreview();
+});
+document.getElementById("style-default-icon")?.addEventListener("change", updateStylePreview);
+document.getElementById("style-icon-by-field")?.addEventListener("change", () => {
+  STYLE_ICON_CATEGORIES = {};
+  refreshIconByValues();
+});
 
 // ---- Share (people + Layer URL) ----
 let SHARE_COPY_RESET = null;

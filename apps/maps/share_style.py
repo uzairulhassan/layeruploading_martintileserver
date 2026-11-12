@@ -10,7 +10,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from apps.layers.share_style import MAPLIBRE_GLYPHS, build_layer_paint_layers
+from apps.layers.share_style import (
+    MAPLIBRE_GLYPHS,
+    build_layer_paint_layers,
+    build_style_legend,
+)
 
 from .models import MapProject
 
@@ -51,7 +55,9 @@ def build_map_share_style(
     ]
 
     needs_glyphs = False
+    required_icons: list[str] = []
     layer_meta: list[dict] = []
+    legend_sections: list[dict] = []
 
     map_layers = (
         map_project.map_layers.select_related("layer").order_by("order")
@@ -68,7 +74,8 @@ def build_map_share_style(
         }
         visibility = "visible" if map_layer.visible else "none"
         override = map_layer.style_override or {}
-        paint_layers, layer_needs_glyphs = build_layer_paint_layers(
+        merged_style = {**(layer.style or {}), **(override or {})}
+        paint_layers, layer_needs_glyphs, layer_icons = build_layer_paint_layers(
             layer=layer,
             source_id=source_id,
             style=override,
@@ -77,7 +84,13 @@ def build_map_share_style(
         )
         layers.extend(paint_layers)
         needs_glyphs = needs_glyphs or layer_needs_glyphs
+        for icon_id in layer_icons:
+            if icon_id not in required_icons:
+                required_icons.append(icon_id)
         label_config = layer.label_config or {}
+        legend = build_style_legend(merged_style, title=layer.name)
+        if legend and map_layer.visible:
+            legend_sections.append(legend)
         layer_meta.append(
             {
                 "id": str(layer.id),
@@ -89,6 +102,7 @@ def build_map_share_style(
                 "geometry_type": layer.geometry_type or "",
                 "attribute_schema": layer.attribute_schema or [],
                 "label_field": (label_config.get("field") or "").strip(),
+                "legend": legend,
             }
         )
 
@@ -102,6 +116,8 @@ def build_map_share_style(
             "geolayers:map_id": str(map_project.id),
             "geolayers:basemap_style": map_project.basemap_style,
             "geolayers:layers": layer_meta,
+            "geolayers:required_icons": required_icons,
+            "geolayers:legend": legend_sections,
         },
         "sources": sources,
         "layers": layers,

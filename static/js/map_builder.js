@@ -133,6 +133,7 @@ function bindBuilderChrome() {
     setHidden(picker, !open);
     document.getElementById("add-layer-btn")?.classList.toggle("is-open", !!open);
   });
+  document.getElementById("apply-stack-order-btn")?.addEventListener("click", applyRecommendedStackOrder);
 
   document.getElementById("basemap-select")?.addEventListener("change", (event) => {
     applyBasemapStyle(event.target.value);
@@ -197,6 +198,7 @@ async function loadMap() {
   setHidden(document.getElementById("share-map-btn"), !isMapOwner());
   setHidden(document.getElementById("edit-map-name-btn"), readOnly);
   setHidden(document.getElementById("add-layer-btn"), readOnly);
+  setHidden(document.getElementById("apply-stack-order-btn"), readOnly);
   document.getElementById("map-name-input").disabled = readOnly;
   document.getElementById("basemap-select").disabled = readOnly;
 
@@ -230,8 +232,12 @@ function renderActiveLayers() {
   const readOnly = isReadOnly();
   updateLayersBadge();
 
+  const stackBtn = document.getElementById("apply-stack-order-btn");
+  if (stackBtn) stackBtn.disabled = readOnly || !layers.length;
+
   if (!layers.length) {
     container.innerHTML = `<p class="layer-empty">No layers on this map yet. Use Add Layer to compose one.</p>`;
+    renderMapLegendPanel();
     return;
   }
 
@@ -302,6 +308,15 @@ function renderActiveLayers() {
       btn.addEventListener("click", () => moveLayer(mapLayerId, btn.dataset.move));
     });
   });
+  renderMapLegendPanel();
+}
+
+function renderMapLegendPanel() {
+  const root = document.getElementById("map-legend");
+  if (!root || !window.GeoLayersLegend) return;
+  const sections = GeoLayersLegend.legendSectionsFromMapLayers(MAP_DATA?.map_layers || []);
+  const collapsed = root.classList.contains("is-collapsed");
+  GeoLayersLegend.renderMapLegend(root, sections, { collapsed });
 }
 
 async function loadAvailableLayers() {
@@ -422,6 +437,20 @@ async function moveLayer(mapLayerId, direction) {
     method: "POST",
     body: { order: sorted.map((ml) => ml.id) },
   });
+  await refreshAfterLayerChange();
+}
+
+async function applyRecommendedStackOrder() {
+  if (isReadOnly()) return;
+  const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/apply-recommended-order/`, {
+    method: "POST",
+    body: {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    alert(body.detail || "Could not apply recommended stack order.");
+    return;
+  }
   await refreshAfterLayerChange();
 }
 
@@ -653,8 +682,9 @@ function renderMapLayers() {
     return;
   }
   clearMapboxLayers();
+  window.GeoLayersIcons?.ensureGeoLayersIcons(GL_MAP, collectRequiredIconsFromMap());
   [...MAP_DATA.map_layers]
-    .sort((a, b) => a.order - b.order)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .forEach((ml) => addMapboxLayer(ml));
 }
 
@@ -667,7 +697,7 @@ function addInvisibleHitLayers(mapLayer, sourceId, tableName, geomType, visibili
       id, source: sourceId, "source-layer": tableName, type: "circle",
       layout: { visibility },
       paint: {
-        "circle-radius": 14,
+        "circle-radius": 16,
         "circle-opacity": 0,
         "circle-stroke-width": 0,
       },
@@ -686,6 +716,17 @@ function addInvisibleHitLayers(mapLayer, sourceId, tableName, geomType, visibili
     });
     ADDED_MAPBOX_LAYER_IDS.push(id);
   }
+}
+
+function collectRequiredIconsFromMap() {
+  // Prefer server-built required_icons from MapLayerSerializer (same as share styles).
+  const icons = new Set();
+  (MAP_DATA?.map_layers || []).forEach((ml) => {
+    (ml.required_icons || []).forEach((id) => {
+      if (typeof id === "string" && id) icons.add(id);
+    });
+  });
+  return [...icons];
 }
 
 function addMapboxLayer(mapLayer) {

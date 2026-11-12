@@ -147,7 +147,7 @@
             <h3 class="style-panel-title">Paint</h3>
             <div class="form-grid">
               <div class="form-group">
-                <label for="style-fill-color">Fill / line color</label>
+                <label for="style-fill-color">Default fill / line color</label>
                 <div class="color-field">
                   <input type="color" id="style-fill-color-picker" value="#0F2D53" aria-label="Pick fill / line color">
                   <input type="text" id="style-fill-color" placeholder="#0F2D53" spellcheck="false">
@@ -169,6 +169,41 @@
                 <input type="number" id="style-opacity" min="0" max="1" step="0.05" value="0.6">
               </div>
             </div>
+          </section>
+
+          <section class="style-panel">
+            <h3 class="style-panel-title">Color by attribute</h3>
+            <p class="style-panel-hint">Color features from any attribute on this layer so the map reads without clicking every object.</p>
+            <div class="form-grid">
+              <div class="form-group form-grid-span">
+                <label for="style-color-by-field">Attribute field</label>
+                <select id="style-color-by-field"><option value="">None (single color)</option></select>
+              </div>
+            </div>
+            <div id="style-color-by-rows" class="style-category-rows hidden" aria-live="polite"></div>
+          </section>
+
+          <section id="style-marker-panel" class="style-panel hidden">
+            <h3 class="style-panel-title">Point marker</h3>
+            <p class="style-panel-hint">Optional icons for point layers. Pick one icon for all features, or different icons per attribute value. Icon colour still follows the paint / attribute colors above.</p>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="style-marker-type">Marker type</label>
+                <select id="style-marker-type">
+                  <option value="circle">Circle</option>
+                  <option value="icon">Icon</option>
+                </select>
+              </div>
+              <div class="form-group" id="style-default-icon-wrap">
+                <label for="style-default-icon">Default icon</label>
+                <select id="style-default-icon"></select>
+              </div>
+              <div class="form-group form-grid-span" id="style-icon-by-wrap">
+                <label for="style-icon-by-field">Icon by attribute</label>
+                <select id="style-icon-by-field"><option value="">Same icon for all</option></select>
+              </div>
+            </div>
+            <div id="style-icon-by-rows" class="style-category-rows hidden" aria-live="polite"></div>
           </section>
 
           <section class="style-panel">
@@ -326,5 +361,6 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
+<script src="{% static 'js/geolayers_icons.js' %}"></script>
 <script src="{% static 'js/layers.js' %}"></script>
 {% endblock %}

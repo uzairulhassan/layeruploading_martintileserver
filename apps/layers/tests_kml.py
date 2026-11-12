@@ -381,12 +381,16 @@ class LayerGroupApiTests(TestCase):
         line.style = {"color": "#ff0000", "opacity": 0.4, "strokeWidth": 3, "useSourceColors": True}
         paint = build_layer_paint_layers(layer=line, source_id="s")[0][0]["paint"]
         self.assertEqual(paint["line-color"], ["to-color", ["get", "kml_color"], "#ff0000"])
-        self.assertEqual(paint["line-width"][0], "case")
+        # Source width is density- and zoom-scaled: ["*", ["*", ["case", …], dens], zoomFactor]
+        self.assertEqual(paint["line-width"][0], "*")
+        self.assertEqual(paint["line-width"][1][0], "*")
+        self.assertEqual(paint["line-width"][1][1][0], "case")
         self.assertEqual(paint["line-opacity"], 1)
 
         line.style = {"color": "#00ff00", "opacity": 0.4, "strokeWidth": 3}
         paint = build_layer_paint_layers(layer=line, source_id="s")[0][0]["paint"]
         self.assertEqual(paint["line-color"], "#00ff00")
+        self.assertEqual(paint["line-width"][0], "interpolate")
         self.assertEqual(paint["line-opacity"], 0.4)
 
 

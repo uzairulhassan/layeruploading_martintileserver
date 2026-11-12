@@ -21,6 +21,7 @@
 
   <div id="builder-panel" class="map-builder">
     <div id="map-canvas" role="application" aria-label="Map canvas"></div>
+    <aside id="map-legend" class="map-legend" aria-label="Map legend" hidden></aside>
 
     <aside id="layers-panel" class="layers-panel" aria-label="Map layers">
       <div class="layers-panel-head">
@@ -50,7 +51,11 @@
       <div class="layers-panel-body">
         <div id="panel-layers" class="layers-tab-panel" role="tabpanel" aria-labelledby="tab-layers">
           <p class="layer-control-label">Layer control</p>
+          <p class="builder-hint layer-stack-hint">Stack tip: polygons at the bottom, lines in the middle, points on top — so clicks hit the upper features, not the zone underneath.</p>
           <div id="active-layers" class="layer-control-list"></div>
+          <button type="button" class="btn btn-secondary stack-order-btn" id="apply-stack-order-btn" title="Zones → routes → POIs">
+            Apply recommended stack
+          </button>
           <button type="button" class="add-layer-btn" id="add-layer-btn">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -219,5 +224,7 @@
 {% endblock %}
 {% block extra_scripts %}
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
+<script src="{% static 'js/geolayers_icons.js' %}"></script>
+<script src="{% static 'js/map_legend.js' %}"></script>
 <script src="{% static 'js/map_builder.js' %}"></script>
 {% endblock %}

@@ -13,6 +13,7 @@ from .models import MapLayer, MapProject, MapShare, MapShareLink
 class MapLayerSerializer(serializers.ModelSerializer):
     layer_detail = LayerInfoSerializer(source="layer", read_only=True)
     style_layers = serializers.SerializerMethodField()
+    required_icons = serializers.SerializerMethodField()
 
     class Meta:
         model = MapLayer
@@ -25,19 +26,31 @@ class MapLayerSerializer(serializers.ModelSerializer):
             "opacity",
             "style_override",
             "style_layers",
+            "required_icons",
         ]
-        read_only_fields = ["id", "style_layers"]
+        read_only_fields = ["id", "style_layers", "required_icons"]
+
+    def _paint_bundle(self, obj):
+        cache = self.context.setdefault("_map_layer_paint", {})
+        key = obj.pk
+        if key not in cache:
+            cache[key] = build_layer_paint_layers(
+                layer=obj.layer,
+                source_id=f"src-{obj.layer_id}",
+                style=obj.style_override or {},
+                opacity=obj.opacity,
+                visibility="visible" if obj.visible else "none",
+                id_prefix=f"layer-{obj.id}",
+            )
+        return cache[key]
 
     def get_style_layers(self, obj):
-        layers, _needs_glyphs = build_layer_paint_layers(
-            layer=obj.layer,
-            source_id=f"src-{obj.layer_id}",
-            style=obj.style_override or {},
-            opacity=obj.opacity,
-            visibility="visible" if obj.visible else "none",
-            id_prefix=f"layer-{obj.id}",
-        )
+        layers, _needs_glyphs, _required_icons = self._paint_bundle(obj)
         return layers
+
+    def get_required_icons(self, obj):
+        _layers, _needs_glyphs, required_icons = self._paint_bundle(obj)
+        return required_icons
 
 
 class MapShareSerializer(serializers.ModelSerializer):

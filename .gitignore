@@ -26,6 +26,10 @@ staticfiles/
 .env.local
 .env.*.local
 
+# Local AI agent context (do not push)
+.cursor/
+AGENTS.md
+
 # IDE
 .vscode/
 .idea/

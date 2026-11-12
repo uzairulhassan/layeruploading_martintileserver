@@ -10,6 +10,7 @@ from apps.layers.tile_auth import authorize_tile_request
 
 from .models import MapLayer, MapProject, MapShareLink
 from .share_style import build_map_share_style
+from .stack_order import apply_recommended_stack_order, geometry_stack_rank
 
 SECRET = "test-geolayers-secret"
 TABLE_A = "layer_" + "a" * 32
@@ -175,4 +176,57 @@ class MapLayerStyleLayersApiTests(TestCase):
         self.assertEqual(line["source-layer"], self.layer.table_name)
         self.assertEqual(line["paint"]["line-color"], "#112233")
         self.assertEqual(line["paint"]["line-opacity"], 0.5)
-        self.assertEqual(line["paint"]["line-width"], 4)
+        self.assertEqual(line["paint"]["line-width"][0], "interpolate")
+        self.assertEqual(map_layer["required_icons"], [])
+
+
+class MapStackOrderTests(TestCase):
+    """Zones under routes under POIs — recommended stack for clickability."""
+
+    def setUp(self):
+        self.owner = get_user_model().objects.create_user("stack", "stack@example.com", "pw-12345!")
+        self.zone = LayerInfo.objects.create(
+            owner=self.owner,
+            name="Zone",
+            schema_name="layers_data",
+            table_name="layer_" + "1" * 32,
+            geometry_type=LayerInfo.GeometryType.POLYGON,
+        )
+        self.route = LayerInfo.objects.create(
+            owner=self.owner,
+            name="Route",
+            schema_name="layers_data",
+            table_name="layer_" + "2" * 32,
+            geometry_type=LayerInfo.GeometryType.LINESTRING,
+        )
+        self.poi = LayerInfo.objects.create(
+            owner=self.owner,
+            name="POI",
+            schema_name="layers_data",
+            table_name="layer_" + "3" * 32,
+            geometry_type=LayerInfo.GeometryType.POINT,
+        )
+        self.map = MapProject.objects.create(owner=self.owner, name="Stack map")
+        # Intentionally wrong order: POI at bottom, zone on top.
+        MapLayer.objects.create(map=self.map, layer=self.poi, order=0)
+        MapLayer.objects.create(map=self.map, layer=self.route, order=1)
+        MapLayer.objects.create(map=self.map, layer=self.zone, order=2)
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def test_geometry_stack_rank(self):
+        self.assertEqual(geometry_stack_rank("Polygon"), 0)
+        self.assertEqual(geometry_stack_rank("LineString"), 1)
+        self.assertEqual(geometry_stack_rank("Point"), 2)
+
+    def test_apply_recommended_stack_order_api(self):
+        res = self.client.post(f"/api/maps/{self.map.id}/apply-recommended-order/", {}, format="json")
+        self.assertEqual(res.status_code, 200)
+        by_name = {row["layer_detail"]["name"]: row["order"] for row in res.json()}
+        self.assertLess(by_name["Zone"], by_name["Route"])
+        self.assertLess(by_name["Route"], by_name["POI"])
+
+    def test_apply_recommended_stack_order_helper(self):
+        ordered = apply_recommended_stack_order(self.map)
+        names = [ml.layer.name for ml in ordered]
+        self.assertEqual(names, ["Zone", "Route", "POI"])

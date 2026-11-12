@@ -262,3 +262,35 @@ def sample_attribute_value(layer: LayerInfo, field_name: str) -> str | None:
         return None
     text = str(row[0]).strip()
     return text or None
+
+
+def distinct_attribute_values(layer: LayerInfo, field_name: str, *, limit: int = 40) -> list[str]:
+    """Return distinct non-empty values for categorical styling (color/icon by attribute).
+
+    ``field_name`` must be in ``attribute_schema``. Values are capped so the style
+    UI stays usable for high-cardinality fields.
+    """
+    allowed = {col.get("name") for col in (layer.attribute_schema or []) if col.get("name")}
+    if field_name not in allowed:
+        raise ValueError(f"Unknown attribute field: {field_name}")
+
+    limit = max(1, min(int(limit or 40), 80))
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f'''
+            SELECT DISTINCT btrim("{field_name}"::text) AS value
+            FROM "{layer.schema_name}"."{layer.table_name}"
+            WHERE "{field_name}" IS NOT NULL
+              AND btrim("{field_name}"::text) <> ''
+            ORDER BY 1
+            LIMIT %s
+            ''',
+            [limit],
+        )
+        rows = cursor.fetchall()
+    values: list[str] = []
+    for row in rows:
+        text = str(row[0]).strip() if row and row[0] is not None else ""
+        if text:
+            values.append(text)
+    return values

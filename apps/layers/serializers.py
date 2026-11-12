@@ -147,8 +147,11 @@ class LayerShareLinkSerializer(serializers.ModelSerializer):
 
 # Child layers listed polygons → lines → points, the order they stack on a map.
 _GROUP_LAYER_ORDER = {
+    LayerInfo.GeometryType.POLYGON: 0,
     LayerInfo.GeometryType.MULTIPOLYGON: 0,
+    LayerInfo.GeometryType.LINESTRING: 1,
     LayerInfo.GeometryType.MULTILINESTRING: 1,
+    LayerInfo.GeometryType.POINT: 2,
     LayerInfo.GeometryType.MULTIPOINT: 2,
 }
 

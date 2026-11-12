@@ -16,6 +16,7 @@ from .serializers import (
     MapShareSerializer,
     ReorderMapLayersSerializer,
 )
+from .stack_order import apply_recommended_stack_order, insert_map_layer_with_stack
 
 
 class MapProjectViewSet(viewsets.ModelViewSet):
@@ -61,6 +62,9 @@ class MapProjectViewSet(viewsets.ModelViewSet):
                 },
             )
             map_layers.append(map_layer)
+        # After a mixed KML group, normalize the whole map stack (zones→routes→POIs).
+        apply_recommended_stack_order(map_project)
+        map_layers = list(map_project.map_layers.filter(id__in=[ml.id for ml in map_layers]).select_related("layer"))
         return Response(MapLayerSerializer(map_layers, many=True).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get", "post"], url_path="layers")
@@ -82,20 +86,13 @@ class MapProjectViewSet(viewsets.ModelViewSet):
                 {"detail": "You do not have access to this layer."}, status=status.HTTP_403_FORBIDDEN
             )
 
-        order = serializer.validated_data.get("order")
-        if order is None:
-            max_order = map_project.map_layers.count()
-            order = max_order
-
-        map_layer, _ = MapLayer.objects.update_or_create(
-            map=map_project,
+        map_layer = insert_map_layer_with_stack(
+            map_project=map_project,
             layer=layer,
-            defaults={
-                "order": order,
-                "visible": serializer.validated_data.get("visible", True),
-                "opacity": serializer.validated_data.get("opacity", 1.0),
-                "style_override": serializer.validated_data.get("style_override"),
-            },
+            visible=serializer.validated_data.get("visible", True),
+            opacity=serializer.validated_data.get("opacity", 1.0),
+            style_override=serializer.validated_data.get("style_override"),
+            explicit_order=serializer.validated_data.get("order"),
         )
         return Response(MapLayerSerializer(map_layer).data, status=status.HTTP_201_CREATED)
 
@@ -128,6 +125,14 @@ class MapProjectViewSet(viewsets.ModelViewSet):
             map_layer.order = id_to_order[map_layer.id]
         MapLayer.objects.bulk_update(map_layers, ["order"])
 
+        qs = map_project.map_layers.select_related("layer")
+        return Response(MapLayerSerializer(qs, many=True).data)
+
+    @action(detail=True, methods=["post"], url_path="apply-recommended-order")
+    def apply_recommended_order(self, request, pk=None):
+        """Stack zones → routes/roads → POIs so upper layers stay clickable."""
+        map_project = self.get_object()
+        apply_recommended_stack_order(map_project)
         qs = map_project.map_layers.select_related("layer")
         return Response(MapLayerSerializer(qs, many=True).data)
 

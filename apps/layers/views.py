@@ -20,6 +20,7 @@ from .services import (
     LayerImportError,
     delete_layer,
     delete_layer_group,
+    distinct_attribute_values,
     import_shapefile,
     sample_attribute_value,
 )
@@ -94,6 +95,23 @@ class LayerViewSet(viewsets.ModelViewSet):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"field": field, "value": value})
+
+    @action(detail=True, methods=["get"], url_path="attribute-values")
+    def attribute_values(self, request, pk=None):
+        """Distinct attribute values for categorical color/icon styling."""
+        layer = self.get_object()
+        field = (request.query_params.get("field") or "").strip()
+        if not field:
+            return Response({"detail": "Query parameter 'field' is required."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            limit = int(request.query_params.get("limit") or 40)
+        except (TypeError, ValueError):
+            limit = 40
+        try:
+            values = distinct_attribute_values(layer, field, limit=limit)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"field": field, "values": values, "count": len(values)})
 
     @action(detail=True, methods=["post"])
     def share(self, request, pk=None):

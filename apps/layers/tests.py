@@ -294,7 +294,7 @@ class ShareStyleDocumentTests(TestCase):
         line = next(layer for layer in body["layers"] if layer["type"] == "line" and "label" not in layer["id"])
         self.assertEqual(line["source-layer"], TABLE)
         self.assertEqual(line["paint"]["line-color"], "#ff0000")
-        self.assertEqual(line["paint"]["line-width"], 3)
+        self.assertEqual(line["paint"]["line-width"][0], "interpolate")
 
         label = next(layer for layer in body["layers"] if layer["type"] == "symbol")
         self.assertEqual(label["layout"]["text-field"], ["get", "name"])
@@ -308,6 +308,242 @@ class ShareStyleDocumentTests(TestCase):
             expires_at=timezone.now() + timedelta(days=1), is_blocked=True
         )
         self.assertEqual(self.client.get(f"/x/{self.link.token}/style.json").status_code, 403)
+
+
+class CategoricalStylePaintTests(TestCase):
+    """colorBy / marker.iconBy become MapLibre match expressions for shares + builder."""
+
+    def test_line_color_by_attribute(self):
+        from apps.layers.share_style import build_layer_paint_layers
+
+        owner = get_user_model().objects.create_user("cby", "cby@example.com", "pw-12345!")
+        layer = LayerInfo.objects.create(
+            owner=owner,
+            name="Routes",
+            schema_name="layers_data",
+            table_name="layer_" + "c" * 32,
+            geometry_type=LayerInfo.GeometryType.LINESTRING,
+            style={
+                "color": "#888888",
+                "strokeWidth": 3,
+                "opacity": 1,
+                "colorBy": {
+                    "field": "safety",
+                    "default": "#888888",
+                    "categories": {"danger": "#dc2626", "safe": "#16a34a"},
+                },
+            },
+            attribute_schema=[{"name": "safety", "type": "text"}],
+        )
+        layers, _glyphs, icons = build_layer_paint_layers(layer=layer, source_id="s")
+        self.assertEqual(icons, [])
+        paint = layers[0]["paint"]["line-color"]
+        self.assertEqual(paint[0], "match")
+        self.assertEqual(paint[1], ["to-string", ["get", "safety"]])
+        self.assertIn("danger", paint)
+        self.assertIn("#dc2626", paint)
+        self.assertEqual(paint[-1], "#888888")
+
+    def test_point_icons_and_color_by(self):
+        from apps.layers.share_style import build_layer_paint_layers
+
+        owner = get_user_model().objects.create_user("ico", "ico@example.com", "pw-12345!")
+        layer = LayerInfo.objects.create(
+            owner=owner,
+            name="Stations",
+            schema_name="layers_data",
+            table_name="layer_" + "d" * 32,
+            geometry_type=LayerInfo.GeometryType.POINT,
+            style={
+                "color": "#0F2D53",
+                "opacity": 0.9,
+                "colorBy": {
+                    "field": "station_type",
+                    "default": "#0F2D53",
+                    "categories": {"underground": "#2563eb", "surface": "#16a34a"},
+                },
+                "marker": {
+                    "type": "icon",
+                    "icon": "gl-station",
+                    "iconBy": {
+                        "field": "station_type",
+                        "default": "gl-station",
+                        "categories": {
+                            "underground": "gl-underground",
+                            "surface": "gl-station",
+                        },
+                    },
+                },
+            },
+            attribute_schema=[{"name": "station_type", "type": "text"}],
+        )
+        layers, needs_glyphs, icons = build_layer_paint_layers(layer=layer, source_id="s")
+        symbol = next(
+            item
+            for item in layers
+            if item["type"] == "symbol" and "icon-image" in (item.get("layout") or {})
+        )
+        self.assertEqual(symbol["layout"]["icon-image"][0], "match")
+        self.assertEqual(symbol["layout"]["icon-image"][1], ["to-string", ["get", "station_type"]])
+        self.assertEqual(symbol["paint"]["icon-color"][0], "match")
+        self.assertEqual(symbol["layout"]["icon-size"][0], "interpolate")
+        self.assertTrue(symbol["layout"]["icon-allow-overlap"])
+        self.assertTrue(symbol["layout"]["icon-ignore-placement"])
+        self.assertFalse(needs_glyphs)  # icons alone do not need glyphs
+        self.assertIn("gl-underground", icons)
+        self.assertIn("gl-station", icons)
+
+    def test_point_circles_and_lines_scale_with_zoom(self):
+        from apps.layers.share_style import build_layer_paint_layers
+
+        owner = get_user_model().objects.create_user("zoom", "zoom@example.com", "pw-12345!")
+        points = LayerInfo.objects.create(
+            owner=owner,
+            name="Stops",
+            schema_name="layers_data",
+            table_name="layer_" + "f" * 32,
+            geometry_type=LayerInfo.GeometryType.POINT,
+            style={"color": "#0F2D53", "opacity": 0.8},
+        )
+        lines = LayerInfo.objects.create(
+            owner=owner,
+            name="Corridors",
+            schema_name="layers_data",
+            table_name="layer_" + "a" * 32,
+            geometry_type=LayerInfo.GeometryType.LINESTRING,
+            style={"color": "#2563EB", "strokeWidth": 4, "opacity": 1},
+            label_config={"field": "name", "size": 12, "color": "#0F2D53"},
+        )
+        circle = build_layer_paint_layers(layer=points, source_id="s")[0][0]
+        self.assertEqual(circle["paint"]["circle-radius"][0], "interpolate")
+        line_layers, needs_glyphs, _icons = build_layer_paint_layers(layer=lines, source_id="s")
+        line = next(item for item in line_layers if item["type"] == "line")
+        label = next(item for item in line_layers if item["id"].endswith("-label"))
+        self.assertEqual(line["paint"]["line-width"][0], "interpolate")
+        self.assertTrue(needs_glyphs)
+        self.assertEqual(label["minzoom"], 9)  # sparse default feature_count
+        self.assertFalse(label["layout"]["text-allow-overlap"])
+        self.assertEqual(label["layout"]["symbol-placement"], "line")
+        self.assertEqual(label["layout"]["text-size"][0], "interpolate")
+
+    def test_density_scales_point_icons_and_line_width(self):
+        from apps.layers.share_style import build_layer_paint_layers, _density_profile
+
+        owner = get_user_model().objects.create_user("dens", "dens@example.com", "pw-12345!")
+        sparse = LayerInfo.objects.create(
+            owner=owner,
+            name="Sparse POIs",
+            schema_name="layers_data",
+            table_name="layer_" + "b" * 32,
+            geometry_type=LayerInfo.GeometryType.POINT,
+            feature_count=80,
+            style={"color": "#0F2D53", "marker": {"type": "icon", "icon": "gl-station"}},
+        )
+        dense = LayerInfo.objects.create(
+            owner=owner,
+            name="Dense POIs",
+            schema_name="layers_data",
+            table_name="layer_" + "1" * 32,
+            geometry_type=LayerInfo.GeometryType.POINT,
+            feature_count=3010,
+            style={"color": "#0F2D53", "marker": {"type": "icon", "icon": "gl-bus"}},
+        )
+        sparse_line = LayerInfo.objects.create(
+            owner=owner,
+            name="Sparse lines",
+            schema_name="layers_data",
+            table_name="layer_" + "2" * 32,
+            geometry_type=LayerInfo.GeometryType.LINESTRING,
+            feature_count=6,
+            style={"color": "#00ADE5", "strokeWidth": 3, "opacity": 1},
+        )
+        medium_line = LayerInfo.objects.create(
+            owner=owner,
+            name="Medium lines",
+            schema_name="layers_data",
+            table_name="layer_" + "3" * 32,
+            geometry_type=LayerInfo.GeometryType.LINESTRING,
+            feature_count=117,
+            style={"color": "#2563EB", "strokeWidth": 3, "opacity": 1},
+        )
+        self.assertEqual(_density_profile(80)["tier"], "sparse")
+        self.assertEqual(_density_profile(3010)["tier"], "very_dense")
+        sparse_layers = build_layer_paint_layers(layer=sparse, source_id="s")[0]
+        dense_layers = build_layer_paint_layers(layer=dense, source_id="s")[0]
+        sparse_icon = next(item for item in sparse_layers if item["id"].endswith("-symbol"))
+        dense_icon = next(item for item in dense_layers if item["id"].endswith("-symbol"))
+        # Always visible (no minzoom hide); dense smaller/softer at overview, grows on zoom.
+        self.assertNotIn("minzoom", sparse_icon)
+        self.assertNotIn("minzoom", dense_icon)
+        self.assertFalse(any(item["id"].endswith("-overview") for item in dense_layers))
+        self.assertGreater(
+            sparse_icon["layout"]["icon-size"][4],
+            dense_icon["layout"]["icon-size"][4],
+        )
+        self.assertGreaterEqual(dense_icon["layout"]["icon-size"][4], 0.2)
+        self.assertEqual(dense_icon["paint"]["icon-opacity"][0], "interpolate")
+        sparse_w = build_layer_paint_layers(layer=sparse_line, source_id="s")[0][0]["paint"]["line-width"]
+        medium_w = build_layer_paint_layers(layer=medium_line, source_id="s")[0][0]["paint"]["line-width"]
+        self.assertGreater(sparse_w[4], medium_w[4])
+
+    def test_share_style_exposes_required_icons(self):
+        from apps.layers.share_style import build_share_style
+
+        owner = get_user_model().objects.create_user("shr", "shr@example.com", "pw-12345!")
+        layer = LayerInfo.objects.create(
+            owner=owner,
+            name="POIs",
+            schema_name="layers_data",
+            table_name="layer_" + "e" * 32,
+            geometry_type=LayerInfo.GeometryType.POINT,
+            style={
+                "color": "#0F2D53",
+                "marker": {"type": "icon", "icon": "gl-bus"},
+            },
+        )
+        doc = build_share_style(layer=layer, tiles_url="http://example/x/tok/{z}/{x}/{y}.pbf")
+        self.assertEqual(doc["metadata"]["geolayers:required_icons"], ["gl-bus"])
+        self.assertEqual(doc["metadata"]["geolayers:legend"], [])
+        symbol = next(item for item in doc["layers"] if item["type"] == "symbol")
+        self.assertEqual(symbol["layout"]["icon-image"], "gl-bus")
+
+    def test_style_legend_from_color_and_icon_by(self):
+        from apps.layers.share_style import build_style_legend
+
+        legend = build_style_legend(
+            {
+                "color": "#888888",
+                "colorBy": {
+                    "field": "station_type",
+                    "default": "#888888",
+                    "categories": {"underground": "#2563eb", "surface": "#16a34a"},
+                },
+                "marker": {
+                    "type": "icon",
+                    "icon": "gl-station",
+                    "iconBy": {
+                        "field": "station_type",
+                        "default": "gl-station",
+                        "categories": {
+                            "underground": "gl-underground",
+                            "surface": "gl-station",
+                        },
+                    },
+                },
+            },
+            title="Stations",
+        )
+        self.assertEqual(legend["title"], "Stations")
+        self.assertEqual(legend["field"], "station_type")
+        self.assertEqual(len(legend["items"]), 2)
+        by_label = {item["label"]: item for item in legend["items"]}
+        self.assertEqual(by_label["underground"]["color"], "#2563eb")
+        self.assertEqual(by_label["underground"]["icon"], "gl-underground")
+        self.assertEqual(by_label["underground"]["iconLabel"], "Underground")
+        self.assertIsNone(
+            build_style_legend({"color": "#0F2D53", "marker": {"type": "circle"}})
+        )
+
 
 
 # ---------------------------------------------------------------------------------------------

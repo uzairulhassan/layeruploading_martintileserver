@@ -71,8 +71,12 @@ class LayerInfo(models.Model):
 
     attribute_schema = models.JSONField(default=list, blank=True, help_text="[{name, type}] of imported columns")
 
-    style = models.JSONField(default=dict, blank=True, help_text="MapLibre/Mapbox GL paint+layout style")
-    label_config = models.JSONField(default=dict, blank=True, help_text="{field, min_zoom, text_color, ...}")
+    style = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Paint JSON: color, stroke*, opacity, colorBy{field,categories}, marker{type,icon,iconBy}",
+    )
+    label_config = models.JSONField(default=dict, blank=True, help_text="{field, color, size}")
 
     source_filename = models.CharField(max_length=255, blank=True)
 
