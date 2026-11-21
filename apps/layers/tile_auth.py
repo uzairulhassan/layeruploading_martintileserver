@@ -168,9 +168,9 @@ def authorize_tile_request(request, original_uri: str) -> TileDecision:
 
 
 def _shared_secret_ok(request) -> bool:
-    expected = getattr(settings, "TILE_AUTH_SHARED_SECRET", "")
+    expected = getattr(settings, "TILE_AUTH_SHARED_SECRET", "") or ""
     if not expected:
-        return bool(settings.DEBUG)  # tolerated only for local DEBUG runs
+        return bool(settings.DEBUG)
     return constant_time_compare(request.headers.get("X-Tile-Auth-Secret", ""), expected)
 
 

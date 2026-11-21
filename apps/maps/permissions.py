@@ -1,13 +1,12 @@
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
+from apps.accounts.permissions import OWNER_DENY_FOR_SHAREES
+
 from .models import MapShare
 
 
 class IsMapOwnerOrSharedWithPermission(BasePermission):
-    """Same shape as the layers permission: owner has full control, EDIT shares can
-    modify layer composition/layout, VIEW shares are read-only, others get nothing.
-    Only the owner may delete or (re)share a map.
-    """
+    """Owners: full control. EDIT share: composition/layout. VIEW: read-only."""
 
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated)
@@ -24,7 +23,7 @@ class IsMapOwnerOrSharedWithPermission(BasePermission):
         if request.method in SAFE_METHODS:
             return True
 
-        if view.action in ("destroy", "share", "unshare"):
+        if view.action in OWNER_DENY_FOR_SHAREES:
             return False
 
         return share.permission == MapShare.Permission.EDIT

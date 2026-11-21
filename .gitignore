@@ -19,6 +19,7 @@ db.sqlite3-journal
 media/*
 !media/.gitkeep
 staticfiles/
+.cache/
 
 # Env (never commit real secrets)
 .env

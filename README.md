@@ -6,7 +6,7 @@ Martin instance in `../geo_infra` (function source `geolayers_tile`).
 
 ## Stack
 
-- **Django 5** + **DRF** + **SimpleJWT**
+- **Django 5** + **DRF** + **SimpleJWT** (browser: HttpOnly session; API clients: JWT)
 - **PostgreSQL / PostGIS** (shared `geolayers` DB from geo-infra)
 - **GDAL / ogr2ogr** — shapefile import
 - **Martin** (shared) — MVT via `layers_data.geolayers_tile`
@@ -16,7 +16,7 @@ Martin instance in `../geo_infra` (function source `geolayers_tile`).
 
 ```
 apps/
-  accounts/  User, roles, JWT auth
+  accounts/  User, roles, session + JWT auth
   layers/    Upload pipeline, LayerInfo, tile auth, external share links
   maps/      Saved map compositions
   core/      Template pages (dashboard, layers, maps)
@@ -44,7 +44,7 @@ Layer URL → `/x/<token>/style.json`. Map URL → `/m/<token>/style.json`
 # 1. Shared stack
 cd ../geo_infra && docker compose up -d
 
-# 2. This app (use .env locally; on VPS copy .env.prod → .env first)
+# 2. This app (.env locally; on VPS use .env.prod contents as .env)
 cd ../layeruploading_martintileserver
 docker compose -f docker-compose.prod.yml up -d --build
 
@@ -69,7 +69,7 @@ Local live-reload: `docker compose up -d --build` (bind-mounts source).
 | File | Use |
 | --- | --- |
 | `.env` | Local development (gitignored) |
-| `.env.prod` | Production values — copy to VPS as `.env` (gitignored) |
+| `.env.prod` | Production source of truth — deploy its contents as `.env` on the VPS (gitignored) |
 
 ## Key variables
 
@@ -79,8 +79,21 @@ Local live-reload: `docker compose up -d --build` (bind-mounts source).
 | `MAPBOX_ACCESS_TOKEN` | Mapbox GL basemap |
 | `TILES_PUBLIC_URL` | Browser tiles base (default `/tiles`) |
 | `MARTIN_INTERNAL_URL` | Django → Martin on `geo_shared` |
-| `TILE_AUTH_SHARED_SECRET` | Nginx auth_request secret |
+| `TILE_AUTH_SHARED_SECRET` | Nginx auth_request secret (required when `DEBUG=False`) |
+| `SHARE_LINK_MAX_TTL_DAYS` | Max days ahead for finite share-link expiry (default 365) |
+| `USE_TLS` | `True` once HTTPS terminates in front of `:8081` (Secure cookies + HSTS) |
+| `THROTTLE_AUTH_*` / `AUTH_LOGIN_LOCKOUT_*` | Login/register abuse controls |
+| `ALLOW_PUBLIC_SIGNUP` | `True` opens `/signup/` + `/api/auth/register/`; `False` keeps them closed |
+
+## Auth model
+
+1. Browser: `POST /api/auth/login/` sets `geolayers_sessionid` (HttpOnly) and returns `{ user }` only; UI APIs use session + CSRF via `Auth.apiFetch`.
+2. API clients: `POST /api/auth/token/` + `/api/auth/token/refresh/` for JWT (Bearer).
+3. Password change and logout blacklist outstanding refresh tokens; HTML `/logout/` is POST-only.
+4. Public `/signup/` gated by `ALLOW_PUBLIC_SIGNUP`; roles carry upload / create-map / share permissions.
+5. Abuse controls: Django throttles + login lockout; Nginx `limit_req` on `/api/auth/`.
+6. Avatars are re-encoded before storage; share links stay capability URLs with revoke/block/expiry.
 
 ## Bootstrap
 
-First account: open `/onetime/` (Admin + superuser). Later accounts: `/signup/`.
+First account: open `/onetime/` (Admin + superuser). Public accounts use `/signup/` only when `ALLOW_PUBLIC_SIGNUP=True`.

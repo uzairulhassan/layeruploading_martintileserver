@@ -14,13 +14,26 @@ from .tile_auth import SHARE_DENY_MESSAGE, SHARE_DENY_STATUS
 def cors(response: HttpResponse) -> HttpResponse:
     """Share links are token-auth'd with no cookies — wildcard CORS is intentional."""
     response["Access-Control-Allow-Origin"] = "*"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+def share_cache_headers(response: HttpResponse, *, live: bool) -> HttpResponse:
+    """Short TTL for live docs/tiles; no-store when the link is denied."""
+    if live:
+        response["Cache-Control"] = "public, max-age=60"
+    else:
+        response["Cache-Control"] = "no-store"
     return response
 
 
 def share_deny_response(deny: str) -> HttpResponse:
-    return cors(
-        HttpResponse(SHARE_DENY_MESSAGE[deny], status=SHARE_DENY_STATUS[deny], content_type="text/plain")
+    response = HttpResponse(
+        SHARE_DENY_MESSAGE[deny],
+        status=SHARE_DENY_STATUS[deny],
+        content_type="text/plain",
     )
+    return cors(share_cache_headers(response, live=False))
 
 
 def literal_template_uri(request, path: str) -> str:
@@ -49,10 +62,19 @@ def proxy_martin_tile(*, table: str, z, x, y) -> HttpResponse:
             content_type = upstream.headers.get("Content-Type", "application/x-protobuf")
             upstream_status = upstream.status
     except urllib.error.HTTPError as exc:
-        return cors(HttpResponse("Tile not available.", status=exc.code, content_type="text/plain"))
+        return cors(
+            share_cache_headers(
+                HttpResponse("Tile not available.", status=exc.code, content_type="text/plain"),
+                live=False,
+            )
+        )
     except urllib.error.URLError:
-        return cors(HttpResponse("Tile server unreachable.", status=502, content_type="text/plain"))
+        return cors(
+            share_cache_headers(
+                HttpResponse("Tile server unreachable.", status=502, content_type="text/plain"),
+                live=False,
+            )
+        )
 
     response = HttpResponse(tile_bytes, content_type=content_type, status=upstream_status)
-    response["Cache-Control"] = "public, max-age=60"
-    return cors(response)
+    return cors(share_cache_headers(response, live=True))

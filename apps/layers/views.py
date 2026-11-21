@@ -5,6 +5,8 @@ from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.accounts.permissions import CanShareLayers, CanUploadLayers
+
 from .kml_import import import_kml, is_kml_upload
 from .models import LayerGroup, LayerInfo, LayerShare, LayerShareLink
 from .permissions import IsGroupOwnerOrViewerPermission, IsOwnerOrSharedWithPermission
@@ -39,7 +41,7 @@ def _owner_forbidden(layer, user, detail="Only the owner can manage this layer."
 
 class LayerViewSet(viewsets.ModelViewSet):
     serializer_class = LayerInfoSerializer
-    permission_classes = [IsOwnerOrSharedWithPermission]
+    permission_classes = [IsOwnerOrSharedWithPermission, CanUploadLayers, CanShareLayers]
 
     def get_queryset(self):
         qs = (
@@ -192,7 +194,7 @@ class LayerGroupViewSet(
     """KML/KMZ uploads as one unit. Groups are created only by uploading (POST /api/layers/)."""
 
     serializer_class = LayerGroupSerializer
-    permission_classes = [IsGroupOwnerOrViewerPermission]
+    permission_classes = [IsGroupOwnerOrViewerPermission, CanShareLayers]
 
     def get_queryset(self):
         user = self.request.user
@@ -207,10 +209,17 @@ class LayerGroupViewSet(
     def perform_destroy(self, instance):
         delete_layer_group(instance)
 
+    def _group_owner_forbidden(self, group, detail="Only the owner can manage this group."):
+        if group.owner_id == self.request.user.id:
+            return None
+        return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
+
     @action(detail=True, methods=["post"])
     def share(self, request, pk=None):
         """Share every layer in the group with one user."""
         group = self.get_object()
+        if denied := self._group_owner_forbidden(group, "Only the owner can share this group."):
+            return denied
         serializer = LayerGroupShareSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         shared_with = serializer.validated_data["shared_with"]
@@ -234,6 +243,8 @@ class LayerGroupViewSet(
     def unshare(self, request, pk=None):
         """Remove one user's access to every layer in the group."""
         group = self.get_object()
+        if denied := self._group_owner_forbidden(group, "Only the owner can modify sharing."):
+            return denied
         deleted, _ = LayerShare.objects.filter(layer__group=group, shared_with_id=request.data.get("user_id")).delete()
         if not deleted:
             return Response({"detail": "Share not found."}, status=status.HTTP_404_NOT_FOUND)

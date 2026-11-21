@@ -3,6 +3,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from apps.accounts.permissions import CanCreateMaps, CanShareMaps
 from apps.layers.models import LayerInfo
 from apps.layers.serializers import sort_group_layers
 
@@ -21,7 +22,7 @@ from .stack_order import apply_recommended_stack_order, insert_map_layer_with_st
 
 class MapProjectViewSet(viewsets.ModelViewSet):
     serializer_class = MapProjectSerializer
-    permission_classes = [IsMapOwnerOrSharedWithPermission]
+    permission_classes = [IsMapOwnerOrSharedWithPermission, CanCreateMaps, CanShareMaps]
 
     def get_queryset(self):
         user = self.request.user

@@ -11,7 +11,13 @@ import json
 from django.http import HttpResponse
 from django.views.decorators.http import require_GET
 
-from apps.layers.share_http import cors, literal_template_uri, proxy_martin_tile, share_deny_response
+from apps.layers.share_http import (
+    cors,
+    literal_template_uri,
+    proxy_martin_tile,
+    share_cache_headers,
+    share_deny_response,
+)
 
 from .share_auth import (
     check_map_share_link,
@@ -27,7 +33,12 @@ def serve_shared_map_tile(request, token, table, z, x, y):
     if deny:
         return share_deny_response(deny)
     if not map_share_allows_table(link, table):
-        return cors(HttpResponse("You do not have access to this layer.", status=403, content_type="text/plain"))
+        response = HttpResponse(
+            "You do not have access to this layer.",
+            status=403,
+            content_type="text/plain",
+        )
+        return cors(share_cache_headers(response, live=False))
 
     record_map_share_link_usage(link)
     return proxy_martin_tile(table=table, z=z, x=x, y=y)
@@ -48,5 +59,4 @@ def serve_shared_map_style(request, token):
         json.dumps(doc, separators=(",", ":")),
         content_type="application/json",
     )
-    response["Cache-Control"] = "public, max-age=60"
-    return cors(response)
+    return cors(share_cache_headers(response, live=True))

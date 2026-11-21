@@ -1,18 +1,33 @@
-from django.contrib.auth import logout as django_logout
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth import REDIRECT_FIELD_NAME, logout as django_logout
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.generic import RedirectView, TemplateView, View
 
 from apps.accounts.models import User
+from apps.core.login_redirect import (
+    GeoLayersLoginRequiredMixin,
+    resolve_post_login_path,
+    should_keep_next,
+)
 
 
 class LoginPageView(TemplateView):
     template_name = "registration/login.html"
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["redirect_field_name"] = REDIRECT_FIELD_NAME
+        return context
+
     def get(self, request, *args, **kwargs):
+        raw_next = request.GET.get(REDIRECT_FIELD_NAME)
+
         if request.user.is_authenticated:
-            return redirect("core:dashboard")
+            return redirect(resolve_post_login_path(raw_next))
+
+        if REDIRECT_FIELD_NAME in request.GET and not should_keep_next(raw_next):
+            return redirect("core:login")
+
         return super().get(request, *args, **kwargs)
 
 
@@ -42,47 +57,38 @@ class OnetimePageView(TemplateView):
 
 
 class LogoutView(View):
-    """Clears the Django session. The frontend JS calls the JWT logout API
-    endpoint first (to blacklist the refresh token) and then hits this view.
-    """
+    """POST-only HTML logout fallback. UI uses ``POST /api/auth/logout/`` then ``/login/``."""
+
+    http_method_names = ["post", "head", "options"]
 
     def post(self, request, *args, **kwargs):
         django_logout(request)
         return redirect("core:login")
 
-    def get(self, request, *args, **kwargs):
-        django_logout(request)
-        return redirect("core:login")
 
-
-class DashboardView(LoginRequiredMixin, TemplateView):
+class DashboardView(GeoLayersLoginRequiredMixin, TemplateView):
     template_name = "core/dashboard.html"
-    login_url = "core:login"
 
 
-class LayerListPageView(LoginRequiredMixin, TemplateView):
+class LayerListPageView(GeoLayersLoginRequiredMixin, TemplateView):
     template_name = "layers/layer_list.html"
-    login_url = "core:login"
 
 
-class MapListPageView(LoginRequiredMixin, TemplateView):
+class MapListPageView(GeoLayersLoginRequiredMixin, TemplateView):
     template_name = "maps/map_list.html"
-    login_url = "core:login"
 
 
-class MapNewRedirectView(LoginRequiredMixin, RedirectView):
+class MapNewRedirectView(GeoLayersLoginRequiredMixin, RedirectView):
     """/maps/new/ opens the create-map modal on the Maps page."""
 
     permanent = False
-    login_url = "core:login"
 
     def get_redirect_url(self, *args, **kwargs):
         return f"{reverse('core:map_list')}?new=1"
 
 
-class MapBuilderPageView(LoginRequiredMixin, TemplateView):
+class MapBuilderPageView(GeoLayersLoginRequiredMixin, TemplateView):
     template_name = "maps/map_builder.html"
-    login_url = "core:login"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -90,11 +96,9 @@ class MapBuilderPageView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class AccountPageView(LoginRequiredMixin, TemplateView):
+class AccountPageView(GeoLayersLoginRequiredMixin, TemplateView):
     template_name = "accounts/account.html"
-    login_url = "core:login"
 
 
-class SecurityPageView(LoginRequiredMixin, TemplateView):
+class SecurityPageView(GeoLayersLoginRequiredMixin, TemplateView):
     template_name = "accounts/security.html"
-    login_url = "core:login"

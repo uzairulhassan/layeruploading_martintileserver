@@ -1,4 +1,3 @@
-import secrets
 import uuid
 
 from django.conf import settings
@@ -6,10 +5,10 @@ from django.db import models
 from django.utils import timezone
 
 from apps.layers.models import LayerInfo
+from apps.layers.share_policy import generate_share_token
 
-
-def _generate_map_share_token() -> str:
-    return secrets.token_urlsafe(24)
+# Kept for historical migration defaults (maps.0002).
+_generate_map_share_token = generate_share_token
 
 
 class MapProject(models.Model):
@@ -34,6 +33,7 @@ class MapProject(models.Model):
     class Meta:
         ordering = ["-updated_at"]
         permissions = [
+            ("create_mapproject", "Can create new maps"),
             ("share_mapproject", "Can share maps with other users"),
         ]
 
@@ -92,7 +92,7 @@ class MapShareLink(models.Model):
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="map_share_links"
     )
-    token = models.CharField(max_length=64, unique=True, editable=False, default=_generate_map_share_token)
+    token = models.CharField(max_length=64, unique=True, editable=False, default=generate_share_token)
     expires_at = models.DateTimeField(
         null=True,
         blank=True,

@@ -6,7 +6,7 @@
 <h1>Sign in</h1>
 <p class="auth-lede">Continue with your username or email.</p>
 
-<form id="login-form" class="auth-form">
+<form id="login-form" class="auth-form" data-redirect-field="{{ redirect_field_name }}">
   <div class="form-group">
     <label for="username">Username or email</label>
     <input type="text" id="username" name="username" required autofocus autocomplete="username" placeholder="you@example.com">

@@ -5,6 +5,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -36,7 +37,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     # Local apps
-    "apps.accounts",
+    "apps.accounts.apps.AccountsConfig",
     "apps.layers",
     "apps.maps",
     "apps.core",
@@ -124,29 +125,67 @@ MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 LOGIN_URL = "core:login"
-LOGIN_REDIRECT_URL = "core:dashboard"
 LOGOUT_REDIRECT_URL = "core:login"
 
-# Production hardening (safe defaults; HTTPS flags stay off until TLS is fronted)
+# Session is the first-party browser credential (HttpOnly). JWT is for API clients.
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = env("SESSION_COOKIE_SAMESITE", default="Lax")
+CSRF_COOKIE_HTTPONLY = False  # readable by Auth.apiFetch
+CSRF_COOKIE_SAMESITE = env("CSRF_COOKIE_SAMESITE", default="Lax")
+
+# USE_TLS=True when HTTPS terminates in front of :8081 (Secure cookies + HSTS).
+USE_TLS = env.bool("USE_TLS", default=False)
+SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=USE_TLS)
+CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=USE_TLS)
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=USE_TLS)
+
 if not DEBUG:
-    SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=False)
-    CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=False)
-    SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
     SECURE_REFERRER_POLICY = "same-origin"
+    if USE_TLS:
+        SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31536000)
+        SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=True)
+        SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", default=False)
+
+# Shared by auth throttles and login lockout (file cache works across gunicorn threads).
+_CACHE_DIR = BASE_DIR / ".cache" / "django"
+try:
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    _CACHE_DIR = Path("/tmp/geolayers-django-cache")
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": str(_CACHE_DIR),
+        "TIMEOUT": 300,
+    }
+}
+
+AUTH_LOGIN_LOCKOUT_ATTEMPTS = env.int("AUTH_LOGIN_LOCKOUT_ATTEMPTS", default=5)
+AUTH_LOGIN_LOCKOUT_SECONDS = env.int("AUTH_LOGIN_LOCKOUT_SECONDS", default=900)
+
+# Public /signup/ + POST /api/auth/register/. False = closed (default). Onetime bootstrap is separate.
+ALLOW_PUBLIC_SIGNUP = env.bool("ALLOW_PUBLIC_SIGNUP", default=False)
 
 # ---------------------------------------------------------------------------
 # Django REST Framework / SimpleJWT
 # ---------------------------------------------------------------------------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_login": env("THROTTLE_AUTH_LOGIN", default="10/min"),
+        "auth_register": env("THROTTLE_AUTH_REGISTER", default="5/min"),
+        "auth_refresh": env("THROTTLE_AUTH_REFRESH", default="30/min"),
+        "auth_username": env("THROTTLE_AUTH_USERNAME", default="30/min"),
+    },
     "DEFAULT_PAGINATION_CLASS": "apps.core.pagination.StandardPagination",
     "PAGE_SIZE": 25,
     "DEFAULT_PARSER_CLASSES": (
@@ -181,6 +220,15 @@ MARTIN_INTERNAL_URL = env("MARTIN_INTERNAL_URL", default="http://martin:3000")
 # Nginx sends this in X-Tile-Auth-Secret on every tile auth subrequest.
 # It must match GEOLAYERS_TILE_AUTH_SHARED_SECRET in ../geo-infra/.env.
 TILE_AUTH_SHARED_SECRET = env("TILE_AUTH_SHARED_SECRET", default="")
+if not DEBUG and not TILE_AUTH_SHARED_SECRET:
+    raise ImproperlyConfigured(
+        "TILE_AUTH_SHARED_SECRET is required when DEBUG=False "
+        "(must match GEOLAYERS_TILE_AUTH_SHARED_SECRET in geo_infra)."
+    )
+
+# Share links remain capability URLs; cap finite expiries (null = never expires, still revocable).
+SHARE_LINK_MAX_TTL_DAYS = env.int("SHARE_LINK_MAX_TTL_DAYS", default=365)
+
 OGR2OGR_PATH = env("OGR2OGR_PATH", default="ogr2ogr")
 
 # Shapefiles are uploaded as a single .zip containing .shp/.shx/.dbf/.prj (+ optional .cpg/.qpj)

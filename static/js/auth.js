@@ -1,33 +1,5 @@
-/**
- * JWT auth helper: stores the access/refresh token pair issued at login,
- * attaches the access token to API calls, and transparently refreshes it
- * once on a 401 before retrying the original request.
- *
- * Also provides registration helpers (username availability + sign-up POST)
- * used by the signup / onetime pages.
- */
+/** First-party auth: session cookie + CSRF. Login is session-only (no JWT storage). */
 const Auth = (() => {
-  const ACCESS_KEY = "geolayers_access_token";
-  const REFRESH_KEY = "geolayers_refresh_token";
-
-  function getAccessToken() {
-    return localStorage.getItem(ACCESS_KEY);
-  }
-
-  function getRefreshToken() {
-    return localStorage.getItem(REFRESH_KEY);
-  }
-
-  function setTokens({ access, refresh }) {
-    if (access) localStorage.setItem(ACCESS_KEY, access);
-    if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
-  }
-
-  function clearTokens() {
-    localStorage.removeItem(ACCESS_KEY);
-    localStorage.removeItem(REFRESH_KEY);
-  }
-
   function getCookie(name) {
     const match = document.cookie.match(new RegExp(`(^|;\\s*)${name}=([^;]*)`));
     return match ? decodeURIComponent(match[2]) : null;
@@ -51,14 +23,17 @@ const Auth = (() => {
     const response = await fetch("/api/auth/login/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({ username, password }),
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
+      if (response.status === 429) {
+        throw new Error(formatApiErrors(body, "Too many sign-in attempts. Please try again later."));
+      }
       throw new Error(formatApiErrors(body, "Invalid username/email or password."));
     }
     const data = await response.json();
-    setTokens({ access: data.access, refresh: data.refresh });
     return data.user;
   }
 
@@ -66,10 +41,14 @@ const Auth = (() => {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify(payload),
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
+      if (response.status === 429) {
+        throw new Error(formatApiErrors(body, "Too many registration attempts. Please try again later."));
+      }
       throw new Error(formatApiErrors(body));
     }
     return body;
@@ -146,6 +125,7 @@ const Auth = (() => {
       try {
         const response = await fetch(
           `/api/auth/username-available/?username=${encodeURIComponent(username)}`,
+          { credentials: "same-origin" },
         );
         const body = await response.json().catch(() => ({}));
         if (requestId !== latestRequest) return;
@@ -274,50 +254,26 @@ const Auth = (() => {
     };
   }
 
-  async function refreshAccessToken() {
-    const refresh = getRefreshToken();
-    if (!refresh) throw new Error("No refresh token available.");
-
-    const response = await fetch("/api/auth/token/refresh/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh }),
-    });
-    if (!response.ok) {
-      clearTokens();
-      throw new Error("Session expired.");
-    }
-    const data = await response.json();
-    setTokens({ access: data.access, refresh: data.refresh });
-    return data.access;
-  }
-
   async function logout() {
-    const refresh = getRefreshToken();
     try {
       await fetch("/api/auth/logout/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${getAccessToken()}`,
+          "X-CSRFToken": getCookie("csrftoken") || "",
         },
-        body: JSON.stringify({ refresh }),
+        credentials: "same-origin",
+        body: "{}",
       });
     } catch (err) {
-      // Best effort — still clear local state and end the Django session below.
+      // Best effort — still leave the app.
     }
-    clearTokens();
-    window.location.href = "/logout/";
+    window.location.href = "/login/";
   }
 
-  /**
-   * fetch() wrapper that attaches the JWT access token and retries once
-   * after a silent refresh if the server responds 401.
-   */
-  async function apiFetch(url, options = {}, _retried = false) {
+  /** Session cookie + CSRF on mutating requests. */
+  async function apiFetch(url, options = {}) {
     const headers = new Headers(options.headers || {});
-    const accessToken = getAccessToken();
-    if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
     const isBodyPlainObject =
       options.body && !(options.body instanceof FormData) && typeof options.body === "object";
@@ -330,17 +286,19 @@ const Auth = (() => {
       headers.set("X-CSRFToken", getCookie("csrftoken") || "");
     }
 
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      credentials: "same-origin",
+    });
 
-    if (response.status === 401 && !_retried && getRefreshToken()) {
-      try {
-        await refreshAccessToken();
-        return apiFetch(url, options, true);
-      } catch (err) {
-        clearTokens();
-        window.location.href = "/logout/";
-        throw err;
-      }
+    if (response.status === 401) {
+      const next = `${window.location.pathname}${window.location.search}`;
+      const loginUrl = next && next !== "/"
+        ? `/login/?next=${encodeURIComponent(next)}`
+        : "/login/";
+      window.location.href = loginUrl;
+      throw new Error("Session expired.");
     }
 
     return response;
@@ -385,8 +343,12 @@ const Auth = (() => {
   }
 
   function personMeta(user) {
-    const email = user?.email ? escapeHtml(user.email) : "";
-    if (email) return `<span class="person-email">${email}</span>`;
+    // Directory payloads omit email; show @username when it differs from display name.
+    const display = String(user?.display_name || "").trim();
+    const username = String(user?.username || "").trim();
+    if (username && display && display !== username) {
+      return `<span class="person-username">@${escapeHtml(username)}</span>`;
+    }
     return "";
   }
 

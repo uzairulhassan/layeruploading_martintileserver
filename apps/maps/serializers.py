@@ -1,10 +1,10 @@
 from django.db.models import Sum
-from django.utils import timezone
 from rest_framework import serializers
 
 from apps.accounts.serializers import UserSummarySerializer
 from apps.layers.models import LayerGroup, LayerInfo
 from apps.layers.serializers import LayerInfoSerializer
+from apps.layers.share_policy import validate_share_expires_at
 from apps.layers.share_style import build_layer_paint_layers
 
 from .models import MapLayer, MapProject, MapShare, MapShareLink
@@ -144,11 +144,7 @@ class MapShareLinkSerializer(serializers.ModelSerializer):
         }
 
     def validate_expires_at(self, value):
-        if value is None:
-            return value
-        if value <= timezone.now():
-            raise serializers.ValidationError("Expiry must be in the future.")
-        return value
+        return validate_share_expires_at(value)
 
     def _share_base(self, obj):
         request = self.context.get("request")

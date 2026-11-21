@@ -1,9 +1,13 @@
-import secrets
 import uuid
 
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+
+from .share_policy import generate_share_token
+
+# Kept for historical migration defaults (layers.0002).
+_generate_share_token = generate_share_token
 
 
 class LayerGroup(models.Model):
@@ -126,10 +130,6 @@ class LayerShare(models.Model):
         return f"{self.layer.name} -> {self.shared_with} ({self.permission})"
 
 
-def _generate_share_token() -> str:
-    return secrets.token_urlsafe(24)
-
-
 class LayerShareLink(models.Model):
     """Revocable public Layer URL for one layer (no account required).
 
@@ -143,7 +143,7 @@ class LayerShareLink(models.Model):
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="layer_share_links"
     )
-    token = models.CharField(max_length=64, unique=True, editable=False, default=_generate_share_token)
+    token = models.CharField(max_length=64, unique=True, editable=False, default=generate_share_token)
     expires_at = models.DateTimeField(
         null=True,
         blank=True,

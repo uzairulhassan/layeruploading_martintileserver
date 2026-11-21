@@ -4,6 +4,8 @@
 {% block auth_panel %}
 <p class="auth-kicker">New account</p>
 <h1>Create account</h1>
+
+{% if ALLOW_PUBLIC_SIGNUP %}
 <p class="auth-lede">Register to upload layers and build maps.</p>
 
 <form
@@ -23,13 +25,22 @@
     <input type="email" id="email" name="email" required autocomplete="email" placeholder="you@example.com">
   </div>
   {% include "registration/include_password_fields.html" %}
-  <button type="submit" id="register-submit" class="btn btn-primary btn-block auth-submit">Create account</button>
+  <button type="submit" id="register-submit" class="btn btn-primary btn-block auth-submit" disabled>Create account</button>
 </form>
 
 <p class="auth-footer">
   Already have an account? <a href="{% url 'core:login' %}">Sign in</a>
 </p>
+{% else %}
+<p class="auth-lede">Public registration is managed by GeoLayers.</p>
+<p class="auth-banner" role="status">{{ PUBLIC_SIGNUP_CLOSED_MESSAGE }}</p>
+<p class="auth-footer">
+  Already have an account? <a href="{% url 'core:login' %}">Sign in</a>
+</p>
+{% endif %}
 {% endblock %}
 {% block auth_scripts %}
+{% if ALLOW_PUBLIC_SIGNUP %}
 <script src="{% static 'js/register_form.js' %}"></script>
+{% endif %}
 {% endblock %}

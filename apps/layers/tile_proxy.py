@@ -9,7 +9,13 @@ import json
 from django.http import HttpResponse
 from django.views.decorators.http import require_GET
 
-from .share_http import cors, literal_template_uri, proxy_martin_tile, share_deny_response
+from .share_http import (
+    cors,
+    literal_template_uri,
+    proxy_martin_tile,
+    share_cache_headers,
+    share_deny_response,
+)
 from .share_style import build_share_style
 from .tile_auth import check_share_link, record_share_link_usage
 
@@ -37,6 +43,4 @@ def serve_shared_style(request, token):
         json.dumps(doc, separators=(",", ":")),
         content_type="application/json",
     )
-    # Short TTL so style edits in GeoLayers show up for external clients quickly.
-    response["Cache-Control"] = "public, max-age=60"
-    return cors(response)
+    return cors(share_cache_headers(response, live=True))
