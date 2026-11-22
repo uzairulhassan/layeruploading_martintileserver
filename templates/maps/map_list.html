@@ -94,8 +94,18 @@
 <div id="create-map-modal" class="modal-backdrop hidden">
   <div class="modal" role="dialog" aria-labelledby="create-map-title">
     <div class="modal-header">
-      <h2 id="create-map-title">Create a new map</h2>
-      <p class="modal-sub">Name your project, then add and style layers in the builder.</p>
+      <div class="modal-title-row">
+        <span class="modal-header-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M9 4.5 3.5 6.5v13L9 17.5l6 2 5.5-2v-13L15 6.5 9 4.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+            <path d="M9 4.5v13M15 6.5v13" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <div class="modal-title-copy">
+          <h2 id="create-map-title">Create a new map</h2>
+          <p class="modal-sub">Name your project, then add and style layers in the builder.</p>
+        </div>
+      </div>
     </div>
     <form id="create-map-form" class="modal-form">
       <div class="form-group">
@@ -111,34 +121,171 @@
 </div>
 
 <div id="share-modal" class="modal-backdrop hidden">
-  <div class="modal modal-share" role="dialog" aria-labelledby="share-map-title">
+  <div class="modal modal-share" role="dialog" aria-labelledby="share-map-title" aria-describedby="share-map-sub">
     <div class="modal-header">
-      <h2 id="share-map-title">Share map</h2>
-      <p class="modal-sub">Invite teammates to view or edit this map.</p>
+      <div class="modal-title-row">
+        <span class="modal-header-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <circle cx="18" cy="5" r="2.4" stroke="currentColor" stroke-width="1.7"/>
+            <circle cx="6" cy="12" r="2.4" stroke="currentColor" stroke-width="1.7"/>
+            <circle cx="18" cy="19" r="2.4" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M8.4 13.2l7.2 4.1M15.6 6.7l-7.2 4.1" stroke="currentColor" stroke-width="1.7"/>
+          </svg>
+        </span>
+        <div class="modal-title-copy">
+          <h2 id="share-map-title">Share map</h2>
+          <p id="share-map-sub" class="modal-sub">Share with GeoTrak Layers users or create an external link</p>
+        </div>
+      </div>
+      <button type="button" class="modal-dismiss" data-close-modal="share-modal" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="modal-body modal-body-share">
+      <input type="hidden" id="share-map-id">
+
+      <div class="share-tabs" role="tablist" aria-label="Share options">
+        <button type="button" class="share-tab is-active" role="tab" id="share-tab-people" aria-selected="true" aria-controls="share-panel-people" data-share-tab="people">
+          <span class="share-tab-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="currentColor" stroke-width="1.7"/><path d="M3.8 18.2c.7-2.6 2.7-4.1 5.2-4.1s4.5 1.5 5.2 4.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="16.6" cy="9" r="2.3" stroke="currentColor" stroke-width="1.7"/><path d="M15.3 14.2c1.6.2 3 1.1 3.7 3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          </span>
+          <span>GeoTrak Layers Users</span>
+        </button>
+        <button type="button" class="share-tab" role="tab" id="share-tab-external" aria-selected="false" aria-controls="share-panel-external" data-share-tab="external">
+          <span class="share-tab-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M10.2 13.8a4.2 4.2 0 0 1 0-5.9l2.1-2.1a4.2 4.2 0 0 1 5.9 5.9l-1 1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M13.8 10.2a4.2 4.2 0 0 1 0 5.9l-2.1 2.1a4.2 4.2 0 1 1-5.9-5.9l1-1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          </span>
+          <span>External Share</span>
+        </button>
+      </div>
+
+      <div id="share-panel-people" class="share-panel is-active" role="tabpanel" aria-labelledby="share-tab-people">
+        <div class="share-panel-stack">
+          <div class="share-callout">
+            <span class="share-callout-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.25" stroke="currentColor" stroke-width="1.7"/><path d="M12 10.5V16M12 7.8v.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </span>
+            <p>Share this map with users who use GeoTrak Layers. They can open the map and see its layers inside the app. This does not add those layers to their Layers list, and it does not create a public URL.</p>
+          </div>
+
+          <div class="share-invite-card">
+            <div class="share-invite">
+              <div class="form-group">
+                <label for="share-search">Find user</label>
+                <input type="text" id="share-search" placeholder="Search by username" autocomplete="off">
+                <div id="share-results" class="share-results"></div>
+              </div>
+              <div class="form-group">
+                <label for="share-permission">Permission</label>
+                <select id="share-permission">
+                  <option value="view">View only</option>
+                  <option value="edit">Can edit layers &amp; layout</option>
+                </select>
+              </div>
+              <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
+            </div>
+          </div>
+
+          <div class="share-list-block">
+            <div class="share-section-head">
+              <p class="share-heading">Shared with</p>
+              <span id="share-people-count" class="share-count-chip">0</span>
+            </div>
+            <ul id="share-list" class="share-list"></ul>
+          </div>
+        </div>
+      </div>
+
+      <div id="share-panel-external" class="share-panel" role="tabpanel" aria-labelledby="share-tab-external" hidden>
+        <div class="share-panel-stack">
+          <div class="share-callout">
+            <span class="share-callout-icon" aria-hidden="true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M10.2 13.8a4.2 4.2 0 0 1 0-5.9l2.1-2.1a4.2 4.2 0 0 1 5.9 5.9l-1 1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M13.8 10.2a4.2 4.2 0 0 1 0 5.9l-2.1 2.1a4.2 4.2 0 1 1-5.9-5.9l1-1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            </span>
+            <p>Create a public URL for external apps. It shows this map’s currently visible layers. Access ends when the link expires or you revoke it.</p>
+          </div>
+
+          <div class="external-create" id="external-create-panel">
+            <div class="form-group">
+              <span class="external-choice-label">Link type</span>
+              <div class="external-choice" role="radiogroup" aria-label="Link type">
+                <label class="external-choice-option">
+                  <input type="radio" name="external-link-type" value="expiring" checked>
+                  <span class="external-choice-copy">
+                    <span class="external-choice-title">Expirable</span>
+                    <span class="external-choice-desc">Ends on a date you choose</span>
+                  </span>
+                </label>
+                <label class="external-choice-option">
+                  <input type="radio" name="external-link-type" value="permanent">
+                  <span class="external-choice-copy">
+                    <span class="external-choice-title">No expiry</span>
+                    <span class="external-choice-desc">Valid until you revoke</span>
+                  </span>
+                </label>
+              </div>
+              <p id="external-permanent-hint" class="share-field-hint is-hidden">Treat this URL like a password. Revoke it anytime to shut access off.</p>
+            </div>
+
+            <div id="external-expiry-wrap" class="form-group">
+              <label for="external-expiry">Expires on</label>
+              <input type="date" id="external-expiry">
+              <p id="external-ttl-hint" class="share-field-hint"></p>
+            </div>
+
+            <button type="button" class="btn btn-primary share-generate-btn" id="external-create-btn">
+              <span class="share-generate-label">Generate link</span>
+              <span class="share-generate-spinner" aria-hidden="true"></span>
+            </button>
+          </div>
+
+          <div class="share-list-block">
+            <div class="share-section-head">
+              <p class="share-heading">Your links</p>
+              <span id="share-links-count" class="share-count-chip">0</span>
+            </div>
+            <ul id="external-links-list" class="share-list external-links-list"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer modal-footer-share">
+      <button type="button" class="btn" data-close-modal="share-modal">Done</button>
+    </div>
+  </div>
+</div>
+
+<div id="revoke-link-modal" class="modal-backdrop hidden">
+  <div class="modal modal-confirm" role="dialog" aria-labelledby="revoke-link-modal-title" aria-describedby="revoke-link-modal-desc">
+    <div class="modal-header is-danger">
+      <div class="modal-title-row">
+        <span class="modal-header-icon is-danger" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M10.2 13.8a4.2 4.2 0 0 1 0-5.9l2.1-2.1a4.2 4.2 0 0 1 5.9 5.9l-1 1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M13.8 10.2a4.2 4.2 0 0 1 0 5.9l-2.1 2.1a4.2 4.2 0 1 1-5.9-5.9l1-1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M6 18 18 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <div class="modal-title-copy">
+          <h2 id="revoke-link-modal-title">Revoke share link</h2>
+          <p class="modal-sub" id="revoke-link-modal-desc">Anyone using this share link will lose access right away.</p>
+        </div>
+      </div>
     </div>
     <div class="modal-body">
-      <input type="hidden" id="share-map-id">
-      <div class="share-invite">
-        <div class="form-group">
-          <label for="share-search">Find user</label>
-          <input type="text" id="share-search" placeholder="Username or email">
-          <div id="share-results" class="share-results"></div>
-        </div>
-        <div class="form-group">
-          <label for="share-permission">Permission</label>
-          <select id="share-permission">
-            <option value="view">View only</option>
-            <option value="edit">Can edit layers &amp; layout</option>
-          </select>
-        </div>
-        <button type="button" class="btn btn-primary" id="share-submit" disabled>Share</button>
-      </div>
-      <div class="share-list-block">
-        <p class="share-heading">Shared with</p>
-        <ul id="share-list" class="share-list"></ul>
+      <input type="hidden" id="revoke-link-id">
+      <input type="hidden" id="revoke-link-map-id">
+      <div class="confirm-callout">
+        <p class="confirm-label">You are about to revoke this link</p>
+        <p class="confirm-note">This action cannot be undone.</p>
       </div>
       <div class="modal-actions">
-        <button type="button" class="btn" data-close-modal="share-modal">Done</button>
+        <button type="button" class="btn" data-close-modal="revoke-link-modal">Cancel</button>
+        <button type="button" class="btn btn-danger-solid" id="revoke-link-confirm">Revoke link</button>
       </div>
     </div>
   </div>
@@ -147,8 +294,19 @@
 <div id="delete-modal" class="modal-backdrop hidden">
   <div class="modal modal-confirm" role="dialog" aria-labelledby="delete-modal-title" aria-describedby="delete-modal-desc">
     <div class="modal-header is-danger">
-      <h2 id="delete-modal-title">Delete map</h2>
-      <p class="modal-sub" id="delete-modal-desc">This permanently removes the map and its layer layout.</p>
+      <div class="modal-title-row">
+        <span class="modal-header-icon is-danger" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M5 7h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M9 7V5h6v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <div class="modal-title-copy">
+          <h2 id="delete-modal-title">Delete map</h2>
+          <p class="modal-sub" id="delete-modal-desc">This permanently removes the map and its layer layout.</p>
+        </div>
+      </div>
     </div>
     <div class="modal-body">
       <input type="hidden" id="delete-id">

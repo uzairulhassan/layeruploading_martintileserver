@@ -113,7 +113,7 @@ class ReorderMapLayersSerializer(serializers.Serializer):
 
 
 class MapShareLinkSerializer(serializers.ModelSerializer):
-    """External Map URL payload. ``style_url`` is what the UI copies as the Map URL."""
+    """External map share-link payload. ``style_url`` is the copyable Share URL."""
 
     style_url = serializers.SerializerMethodField()
     is_expired = serializers.SerializerMethodField()
@@ -152,7 +152,7 @@ class MapShareLinkSerializer(serializers.ModelSerializer):
         return f"{base.rstrip('/')}/m/{obj.token}"
 
     def get_style_url(self, obj):
-        """Map URL — full composition Style Spec for this share token."""
+        """Public Share URL (composition Style Spec) for this share token."""
         return f"{self._share_base(obj)}/style.json"
 
     def get_is_expired(self, obj):
@@ -165,4 +165,5 @@ class MapShareLinkSerializer(serializers.ModelSerializer):
         return obj.usage.aggregate(total=Sum("request_count"))["total"] or 0
 
     def get_layer_count(self, obj):
-        return obj.map.map_layers.count()
+        """Visible layers only — matches what `/m/<token>/style.json` publishes."""
+        return obj.map.map_layers.filter(visible=True).count()

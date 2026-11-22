@@ -1,53 +1,108 @@
 /**
- * App-wide theme preferences.
- * Persists selection in localStorage and applies data-theme on <html>.
+ * GeoLayers theme system — single catalog for FOUC, persistence, and picker UI.
+ * Load in <head> before main.css so data-theme / data-chrome apply before paint.
  */
-const Theme = (() => {
+(function (global) {
   const STORAGE_KEY = "geolayers_theme";
   const DEFAULT_THEME = "classic";
-  const THEMES = [
-    { id: "classic", label: "Classic", hint: "Blue on soft white", swatch: ["#1d6ef5", "#f5f7fb"] },
-    { id: "mono", label: "Mono", hint: "Black & white", swatch: ["#141414", "#f6f6f6"] },
-    { id: "midnight", label: "Midnight", hint: "Dark professional", swatch: ["#0d1118", "#3b82f6"] },
-    { id: "graphite", label: "Graphite", hint: "Charcoal & gray", swatch: ["#242a34", "#eceff3"] },
-  ];
+
+  /** @type {ReadonlyArray<{id:string,label:string,hint:string,swatch:[string,string],chrome:"light"|"dark"}>} */
+  const THEMES = Object.freeze([
+    {
+      id: "classic",
+      label: "Classic",
+      hint: "Blue on soft white",
+      swatch: ["#1d6ef5", "#f7f9fc"],
+      chrome: "light",
+    },
+    {
+      id: "mono",
+      label: "Mono",
+      hint: "Black & white",
+      swatch: ["#141414", "#f6f6f6"],
+      chrome: "light",
+    },
+    {
+      id: "midnight",
+      label: "Midnight",
+      hint: "Dark professional",
+      swatch: ["#0d1118", "#3b82f6"],
+      chrome: "dark",
+    },
+    {
+      id: "graphite",
+      label: "Graphite",
+      hint: "Cool charcoal light",
+      swatch: ["#242a34", "#eceff3"],
+      chrome: "light",
+    },
+  ]);
+
+  const THEME_BY_ID = Object.freeze(
+    Object.fromEntries(THEMES.map((theme) => [theme.id, theme]))
+  );
 
   let animTimer = null;
+  let documentBound = false;
 
   function isValid(id) {
-    return THEMES.some((theme) => theme.id === id);
+    return Boolean(id && THEME_BY_ID[id]);
+  }
+
+  function resolveTheme(id) {
+    return isValid(id) ? id : DEFAULT_THEME;
+  }
+
+  function readStored() {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (isValid(stored)) return stored;
+    } catch (err) {
+      /* private mode / blocked storage */
+    }
+    return null;
   }
 
   function getTheme() {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored && isValid(stored)) return stored;
-    } catch (err) {
-      /* ignore */
-    }
-    const attr = document.documentElement.getAttribute("data-theme");
-    return isValid(attr) ? attr : DEFAULT_THEME;
+    return resolveTheme(
+      readStored() || document.documentElement.getAttribute("data-theme")
+    );
   }
 
-  function setTheme(id, { animate = true } = {}) {
-    const theme = isValid(id) ? id : DEFAULT_THEME;
+  function applyToDocument(themeId, { animate = false } = {}) {
+    const theme = resolveTheme(themeId);
+    const meta = THEME_BY_ID[theme];
     const root = document.documentElement;
+
     if (animate) {
       root.classList.add("theme-animating");
       clearTimeout(animTimer);
-      animTimer = setTimeout(() => root.classList.remove("theme-animating"), 300);
+      animTimer = setTimeout(() => root.classList.remove("theme-animating"), 320);
     }
+
     root.setAttribute("data-theme", theme);
-    try {
-      localStorage.setItem(STORAGE_KEY, theme);
-    } catch (err) {
-      /* ignore */
-    }
+    root.setAttribute("data-chrome", meta.chrome);
+
     document.querySelectorAll("[data-theme-option]").forEach((btn) => {
       const active = btn.getAttribute("data-theme-option") === theme;
       btn.classList.toggle("is-active", active);
       btn.setAttribute("aria-checked", active ? "true" : "false");
     });
+
+    return theme;
+  }
+
+  function persist(themeId) {
+    try {
+      localStorage.setItem(STORAGE_KEY, themeId);
+    } catch (err) {
+      /* ignore */
+    }
+  }
+
+  function setTheme(id, { animate = true, persist: shouldPersist = true } = {}) {
+    const theme = applyToDocument(id, { animate });
+    if (shouldPersist) persist(theme);
     return theme;
   }
 
@@ -76,15 +131,28 @@ const Theme = (() => {
     }).join("");
   }
 
+  function closeAllPickers(exceptRoot) {
+    document.querySelectorAll("[data-theme-picker]").forEach((rootEl) => {
+      if (exceptRoot && rootEl === exceptRoot) return;
+      const btn = rootEl.querySelector("[data-theme-trigger]");
+      const menu = rootEl.querySelector("[data-theme-menu]");
+      if (!btn || !menu) return;
+      menu.classList.add("hidden");
+      btn.setAttribute("aria-expanded", "false");
+    });
+  }
+
   function bindPicker(rootEl) {
     const btn = rootEl.querySelector("[data-theme-trigger]");
     const menu = rootEl.querySelector("[data-theme-menu]");
     const list = rootEl.querySelector("[data-theme-list]");
-    if (!btn || !menu || !list) return;
+    if (!btn || !menu || !list || rootEl.dataset.themeBound === "1") return;
 
+    rootEl.dataset.themeBound = "1";
     renderOptions(list);
 
     function setOpen(open) {
+      if (open) closeAllPickers(rootEl);
       menu.classList.toggle("hidden", !open);
       btn.setAttribute("aria-expanded", open ? "true" : "false");
     }
@@ -100,23 +168,45 @@ const Theme = (() => {
       setTheme(option.getAttribute("data-theme-option"));
       setOpen(false);
     });
+  }
+
+  function bindDocumentOnce() {
+    if (documentBound) return;
+    documentBound = true;
 
     document.addEventListener("click", (event) => {
-      if (menu.classList.contains("hidden") || rootEl.contains(event.target)) return;
-      setOpen(false);
+      if (event.target.closest("[data-theme-picker]")) return;
+      closeAllPickers();
     });
 
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") closeAllPickers();
     });
   }
 
   function init() {
-    setTheme(getTheme(), { animate: false });
+    persist(applyToDocument(getTheme(), { animate: false }));
     document.querySelectorAll("[data-theme-picker]").forEach(bindPicker);
+    bindDocumentOnce();
   }
 
-  return { init };
-})();
+  // Apply stored theme immediately (before CSS paint).
+  applyToDocument(getTheme(), { animate: false });
 
-document.addEventListener("DOMContentLoaded", () => Theme.init());
+  const Theme = Object.freeze({
+    THEMES,
+    STORAGE_KEY,
+    DEFAULT_THEME,
+    getTheme,
+    setTheme,
+    init,
+  });
+
+  global.Theme = Theme;
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})(window);

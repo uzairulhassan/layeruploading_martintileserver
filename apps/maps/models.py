@@ -82,8 +82,8 @@ class MapShare(models.Model):
 class MapShareLink(models.Model):
     """Revocable public Map URL for a map composition (no account required).
 
-    Primary link: ``/m/<token>/style.json`` (layers, styles, viewport — live).
-    Per-layer tiles: ``/m/<token>/<layer_table>/{z}/{x}/{y}.pbf``.
+    Primary link: ``/m/<token>/style.json`` (visible layers, styles, viewport — live).
+    Per-layer tiles: ``/m/<token>/<layer_table>/{z}/{x}/{y}.pbf`` (visible tables only).
     ``expires_at`` may be null (never expires; still revocable / blockable).
     """
 

@@ -36,7 +36,7 @@ LIBKML driver (`ogrinfo --formats | grep LIBKML`).
 
 **Map URL / Layer URL:** owners create revocable links.
 Layer URL → `/x/<token>/style.json`. Map URL → `/m/<token>/style.json`
-(full composition). Styles stay live; revoke / expiry / block apply immediately.
+(visible layers of the composition, live). Styles stay live; revoke / expiry / block apply immediately.
 
 ## Running with Docker (shared infrastructure)
 

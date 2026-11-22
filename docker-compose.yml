@@ -11,6 +11,7 @@ services:
     build: .
     env_file: .env
     environment:
+      TZ: Asia/Riyadh
       MARTIN_INTERNAL_URL: http://martin:3000
     volumes:
       - .:/app

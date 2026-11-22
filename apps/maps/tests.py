@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 from apps.layers.models import LayerInfo
 from apps.layers.tile_auth import authorize_tile_request
 
-from .models import MapLayer, MapProject, MapShareLink
+from .models import MapLayer, MapProject, MapShare, MapShareLink
 from .share_style import build_map_share_style
 from .stack_order import apply_recommended_stack_order, geometry_stack_rank
 
@@ -51,13 +51,17 @@ class MapShareAuthTests(TestCase):
         request.user = AnonymousUser()
         return authorize_tile_request(request, uri)
 
-    def test_map_share_allows_tables_on_the_map(self):
+    def test_map_share_allows_visible_tables_on_the_map(self):
         link = self._link()
-        for table in (TABLE_A, TABLE_B):
-            decision = self._decide(f"/m/{link.token}/{table}/3/4/5.pbf")
-            self.assertEqual(decision.status, 204, table)
-            self.assertEqual(decision.layer_table, table)
-            self.assertNotIn(link.token, decision.token_label)
+        decision = self._decide(f"/m/{link.token}/{TABLE_A}/3/4/5.pbf")
+        self.assertEqual(decision.status, 204)
+        self.assertEqual(decision.layer_table, TABLE_A)
+        self.assertNotIn(link.token, decision.token_label)
+
+    def test_map_share_refuses_hidden_tables(self):
+        link = self._link()
+        decision = self._decide(f"/m/{link.token}/{TABLE_B}/3/4/5.pbf")
+        self.assertEqual((decision.status, decision.reason), (403, "forbidden"))
 
     def test_map_share_refuses_table_not_on_map(self):
         link = self._link()
@@ -79,14 +83,16 @@ class MapShareAuthTests(TestCase):
 
     def test_removing_layer_from_map_stops_tiles(self):
         link = self._link()
-        uri = f"/m/{link.token}/{TABLE_B}/3/4/5.pbf"
+        uri = f"/m/{link.token}/{TABLE_A}/3/4/5.pbf"
         self.assertEqual(self._decide(uri).status, 204)
-        MapLayer.objects.filter(map=self.map, layer=self.layer_b).delete()
+        MapLayer.objects.filter(map=self.map, layer=self.layer_a).delete()
         decision = self._decide(uri)
         self.assertEqual((decision.status, decision.reason), (403, "forbidden"))
 
-    def test_style_document_includes_layers_and_viewport(self):
+    def test_style_document_includes_visible_layers_and_viewport(self):
         link = self._link()
+        self.layer_a.bounds = [46.5, 24.5, 47.0, 25.0]
+        self.layer_a.save(update_fields=["bounds"])
 
         def tiles_url(table):
             return f"https://example.test/m/{link.token}/{table}/{{z}}/{{x}}/{{y}}.pbf"
@@ -94,32 +100,77 @@ class MapShareAuthTests(TestCase):
         doc = build_map_share_style(map_project=self.map, tiles_url_for_table=tiles_url)
         self.assertEqual(doc["version"], 8)
         self.assertEqual(doc["name"], "Ops map")
+        # Custom saved viewport is preserved; bounds still published for fit tools.
         self.assertEqual(doc["center"], [46.7, 24.7])
         self.assertEqual(doc["zoom"], 10)
+        self.assertEqual(doc["metadata"]["geolayers:bounds"], [46.5, 24.5, 47.0, 25.0])
         self.assertIn("basemap-osm", doc["sources"])
         self.assertIn(f"src-{TABLE_A}", doc["sources"])
-        self.assertIn(f"src-{TABLE_B}", doc["sources"])
+        self.assertNotIn(f"src-{TABLE_B}", doc["sources"])
         self.assertEqual(doc["metadata"]["geolayers:kind"], "map")
         meta_a = next(item for item in doc["metadata"]["geolayers:layers"] if item["table"] == TABLE_A)
         self.assertEqual(meta_a["name"], "A")
         self.assertEqual(meta_a["geometry_type"], "LineString")
         self.assertEqual(meta_a["attribute_schema"], [{"name": "name", "type": "text"}])
         self.assertEqual(meta_a["label_field"], "name")
-        # Hidden layer still present with visibility none (stays synced when toggled).
-        hidden = next(layer for layer in doc["layers"] if layer["id"].startswith(TABLE_B))
-        self.assertEqual(hidden["layout"]["visibility"], "none")
+        self.assertFalse(any(item["table"] == TABLE_B for item in doc["metadata"]["geolayers:layers"]))
+        self.assertFalse(any(layer["id"].startswith(TABLE_B) for layer in doc["layers"] if layer.get("id")))
+
+    def test_default_viewport_uses_union_bounds(self):
+        self.map.center_lng = 0
+        self.map.center_lat = 0
+        self.map.zoom = 2
+        self.map.save(update_fields=["center_lng", "center_lat", "zoom"])
+        self.layer_a.bounds = [46.0, 24.0, 48.0, 26.0]
+        self.layer_a.save(update_fields=["bounds"])
+
+        doc = build_map_share_style(
+            map_project=self.map,
+            tiles_url_for_table=lambda table: f"https://example.test/m/tok/{table}/{{z}}/{{x}}/{{y}}.pbf",
+        )
+        self.assertEqual(doc["metadata"]["geolayers:bounds"], [46.0, 24.0, 48.0, 26.0])
+        self.assertEqual(doc["center"], [47.0, 25.0])
+        self.assertGreater(doc["zoom"], 2)
+
+    def test_map_share_grants_app_tiles_without_layer_share(self):
+        """In-app MapShare alone is enough to load composition tiles."""
+        MapShare.objects.create(
+            map=self.map,
+            shared_with=self.stranger,
+            shared_by=self.owner,
+            permission=MapShare.Permission.VIEW,
+        )
+        request = self.factory.get("/tiles-auth/validate/")
+        request.user = self.stranger
+        decision = authorize_tile_request(
+            request, f"/tiles/geolayers_tile/3/4/5?layer={TABLE_A}"
+        )
+        self.assertEqual(decision.status, 204)
+        self.assertEqual(decision.layer_table, TABLE_A)
 
 
 @override_settings(TILE_AUTH_SHARED_SECRET=SECRET)
 class MapShareLinkApiTests(TestCase):
     def setUp(self):
+        from apps.accounts.roles import ensure_user_role
+
         users = get_user_model().objects
         self.owner = users.create_user("apiowner", "apiowner@example.com", "pw-12345!")
         self.other = users.create_user("apiother", "apiother@example.com", "pw-12345!")
+        self.owner.roles.add(ensure_user_role())
         self.map = MapProject.objects.create(owner=self.owner, name="API map")
         self.client = APIClient()
 
     def test_owner_can_create_list_and_revoke_share_links(self):
+        visible = LayerInfo.objects.create(
+            owner=self.owner, name="Vis", schema_name="layers_data", table_name="layer_" + "d" * 32
+        )
+        hidden = LayerInfo.objects.create(
+            owner=self.owner, name="Hid", schema_name="layers_data", table_name="layer_" + "e" * 32
+        )
+        MapLayer.objects.create(map=self.map, layer=visible, order=0, visible=True)
+        MapLayer.objects.create(map=self.map, layer=hidden, order=1, visible=False)
+
         self.client.force_authenticate(self.owner)
         create = self.client.post(
             f"/api/maps/{self.map.id}/share-links/",
@@ -130,10 +181,12 @@ class MapShareLinkApiTests(TestCase):
         self.assertIn("/m/", create.data["style_url"])
         self.assertTrue(create.data["style_url"].endswith("/style.json"))
         self.assertTrue(create.data["never_expires"])
+        self.assertEqual(create.data["layer_count"], 1)
 
         listed = self.client.get(f"/api/maps/{self.map.id}/share-links/")
         self.assertEqual(listed.status_code, 200)
         self.assertEqual(len(listed.data), 1)
+        self.assertEqual(listed.data[0]["layer_count"], 1)
 
         link_id = create.data["id"]
         revoke = self.client.delete(f"/api/maps/{self.map.id}/share-links/{link_id}/")

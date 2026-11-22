@@ -131,7 +131,7 @@ class LayerShare(models.Model):
 
 
 class LayerShareLink(models.Model):
-    """Revocable public Layer URL for one layer (no account required).
+    """Revocable public share link for one layer (no account required).
 
     Primary link: ``/x/<token>/style.json`` (paint + labels, live from LayerInfo).
     Tiles for the same token: ``/x/<token>/{z}/{x}/{y}.pbf``.

@@ -636,8 +636,27 @@ class CategoricalStylePaintTests(TestCase):
         doc = build_share_style(layer=layer, tiles_url="http://example/x/tok/{z}/{x}/{y}.pbf")
         self.assertEqual(doc["metadata"]["geolayers:required_icons"], ["gl-bus"])
         self.assertEqual(doc["metadata"]["geolayers:legend"], [])
+        self.assertEqual(doc["metadata"]["geolayers:kind"], "layer")
         symbol = next(item for item in doc["layers"] if item["type"] == "symbol")
         self.assertEqual(symbol["layout"]["icon-image"], "gl-bus")
+
+    def test_share_style_includes_viewport_from_bounds(self):
+        from apps.layers.share_style import build_share_style
+
+        owner = get_user_model().objects.create_user("vp", "vp@example.com", "pw-12345!")
+        layer = LayerInfo.objects.create(
+            owner=owner,
+            name="Bounded",
+            schema_name="layers_data",
+            table_name="layer_" + "f" * 32,
+            geometry_type=LayerInfo.GeometryType.POINT,
+            bounds=[46.5, 24.5, 47.0, 25.0],
+            style={"color": "#0F2D53"},
+        )
+        doc = build_share_style(layer=layer, tiles_url="http://example/x/tok/{z}/{x}/{y}.pbf")
+        self.assertEqual(doc["center"], [46.75, 24.75])
+        self.assertIn("zoom", doc)
+        self.assertEqual(doc["metadata"]["geolayers:bounds"], [46.5, 24.5, 47.0, 25.0])
 
     def test_style_legend_from_color_and_icon_by(self):
         from apps.layers.share_style import build_style_legend

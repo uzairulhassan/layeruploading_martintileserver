@@ -20,7 +20,13 @@ def share_link_max_ttl() -> timedelta:
 
 
 def validate_share_expires_at(value):
-    """``None`` = never expires (still revocable). Finite values must be within max TTL."""
+    """Validate share-link expiry.
+
+    ``None`` = no expiry (permanent until revoked/blocked). That path is intentional for
+    long-lived embeds; the UI warns owners to treat the URL like a secret.
+
+    Finite values must be in the future and within ``SHARE_LINK_MAX_TTL_DAYS``.
+    """
     if value is None:
         return value
     now = timezone.now()

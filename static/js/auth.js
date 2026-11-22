@@ -1,5 +1,69 @@
 /** First-party auth: session cookie + CSRF. Login is session-only (no JWT storage). */
 const Auth = (() => {
+  // Saudi Arabia (Riyadh) — fixed UTC+3, no DST. Used for every user-facing datetime.
+  const RIYADH_OFFSET = "+03:00";
+
+  function appTimeZone() {
+    return window.GeoLayersConfig?.timeZone || "Asia/Riyadh";
+  }
+
+  function shareLinkMaxTtlDays() {
+    const raw = Number(window.GeoLayersConfig?.shareLinkMaxTtlDays);
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 365;
+  }
+
+  function formatAppDate(isoString, options = {}) {
+    if (!isoString) return "";
+    try {
+      return new Intl.DateTimeFormat("en-GB", {
+        timeZone: appTimeZone(),
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        ...options,
+      }).format(new Date(isoString));
+    } catch {
+      return String(isoString);
+    }
+  }
+
+  function formatAppDateTime(isoString) {
+    return formatAppDate(isoString, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  }
+
+  /** Calendar YYYY-MM-DD in the app timezone (Riyadh). */
+  function appCalendarYmd(fromDate = new Date()) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: appTimeZone(),
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(fromDate);
+    const get = (type) => parts.find((p) => p.type === type)?.value || "01";
+    return `${get("year")}-${get("month")}-${get("day")}`;
+  }
+
+  function addAppCalendarDays(ymd, days) {
+    const base = new Date(`${ymd}T12:00:00${RIYADH_OFFSET}`);
+    base.setTime(base.getTime() + Number(days || 0) * 86400000);
+    return appCalendarYmd(base);
+  }
+
+  /** End of the given Riyadh calendar day as UTC ISO (for share-link expiry). */
+  function endOfAppDayIso(ymd) {
+    return new Date(`${ymd}T23:59:59${RIYADH_OFFSET}`).toISOString();
+  }
+
+  function sharePermissionLabel(permission) {
+    if (permission === "edit") return "Can edit style & labels";
+    if (permission === "view") return "View only";
+    return String(permission || "").replace(/_/g, " ");
+  }
+
   function getCookie(name) {
     const match = document.cookie.match(new RegExp(`(^|;\\s*)${name}=([^;]*)`));
     return match ? decodeURIComponent(match[2]) : null;
@@ -367,7 +431,7 @@ const Auth = (() => {
 
   function renderSharePerson(user, { permission = "", actionHtml = "" } = {}) {
     const perm = permission
-      ? `<span class="person-perm">${escapeHtml(permission)}</span>`
+      ? `<span class="person-perm">${escapeHtml(sharePermissionLabel(permission))}</span>`
       : "";
     const meta = personMeta(user);
     return `
@@ -412,7 +476,15 @@ const Auth = (() => {
     bindModalClosers,
     renderShareHit,
     renderSharePerson,
+    sharePermissionLabel,
     syncHeaderAvatar,
+    appTimeZone,
+    shareLinkMaxTtlDays,
+    formatAppDate,
+    formatAppDateTime,
+    appCalendarYmd,
+    addAppCalendarDays,
+    endOfAppDayIso,
   };
 })();
 

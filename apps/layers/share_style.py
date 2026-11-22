@@ -52,6 +52,8 @@ Professional defaults (any layer, not dataset-specific):
 """
 from __future__ import annotations
 
+import math
+
 from .models import LayerInfo
 
 # Free public glyphs so symbol (label) layers work without a Mapbox token.
@@ -885,12 +887,39 @@ def build_layer_paint_layers(
     return layers, needs_glyphs, required_icons
 
 
+def viewport_from_bounds(bounds: object) -> dict | None:
+    """Derive MapLibre ``center`` / ``zoom`` plus normalized bounds from layer extents."""
+    if not isinstance(bounds, (list, tuple)) or len(bounds) != 4:
+        return None
+    try:
+        minx, miny, maxx, maxy = (float(v) for v in bounds)
+    except (TypeError, ValueError):
+        return None
+    if not all(math.isfinite(v) for v in (minx, miny, maxx, maxy)):
+        return None
+    if maxx <= minx or maxy <= miny:
+        return None
+    center_lng = (minx + maxx) / 2.0
+    center_lat = (miny + maxy) / 2.0
+    lng_span = max(maxx - minx, 1e-6)
+    lat_span = max(maxy - miny, 1e-6)
+    # Rough web-mercator zoom from the larger geographic span.
+    zoom = math.floor(math.log2(360.0 / max(lng_span, lat_span * 1.25)))
+    zoom = float(max(1, min(14, zoom)))
+    return {
+        "center": [round(center_lng, 6), round(center_lat, 6)],
+        "zoom": zoom,
+        "bounds": [minx, miny, maxx, maxy],
+    }
+
+
 def build_share_style(*, layer: LayerInfo, tiles_url: str) -> dict:
     """Return a Mapbox Style Spec v8 document for a single shared ``layer``.
 
     ``tiles_url`` must be an absolute XYZ template ending in ``{z}/{x}/{y}.pbf``
     for this share token. Style is read live from the layer so edits propagate
-    without recreating the share link.
+    without recreating the share link. When ``layer.bounds`` is known, ``center``,
+    ``zoom``, and ``metadata.geolayers:bounds`` are set so viewers can fit the layer.
     """
     paint_layers, needs_glyphs, required_icons = build_layer_paint_layers(
         layer=layer, source_id=_SOURCE_ID
@@ -901,18 +930,20 @@ def build_share_style(*, layer: LayerInfo, tiles_url: str) -> dict:
     geom = layer.geometry_type or ""
 
     legend = build_style_legend(style, title=layer.name)
+    metadata = {
+        "geolayers:source_layer": table,
+        "geolayers:geometry_type": geom,
+        "geolayers:style": style,
+        "geolayers:label_config": label_config,
+        "geolayers:attribute_schema": layer.attribute_schema or [],
+        "geolayers:required_icons": required_icons,
+        "geolayers:legend": [legend] if legend else [],
+        "geolayers:kind": "layer",
+    }
     doc: dict = {
         "version": 8,
         "name": layer.name,
-        "metadata": {
-            "geolayers:source_layer": table,
-            "geolayers:geometry_type": geom,
-            "geolayers:style": style,
-            "geolayers:label_config": label_config,
-            "geolayers:attribute_schema": layer.attribute_schema or [],
-            "geolayers:required_icons": required_icons,
-            "geolayers:legend": [legend] if legend else [],
-        },
+        "metadata": metadata,
         "sources": {
             _SOURCE_ID: {
                 "type": "vector",
@@ -923,6 +954,11 @@ def build_share_style(*, layer: LayerInfo, tiles_url: str) -> dict:
         },
         "layers": paint_layers,
     }
+    viewport = viewport_from_bounds(layer.bounds)
+    if viewport:
+        doc["center"] = viewport["center"]
+        doc["zoom"] = viewport["zoom"]
+        metadata["geolayers:bounds"] = viewport["bounds"]
     if needs_glyphs:
         doc["glyphs"] = MAPLIBRE_GLYPHS
     return doc

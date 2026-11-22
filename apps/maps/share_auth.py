@@ -32,8 +32,16 @@ def check_map_share_link(token: str) -> tuple[MapShareLink | None, str]:
 
 
 def map_share_allows_table(link: MapShareLink, table: str) -> bool:
-    """True when ``table`` is currently attached to the shared map."""
-    return MapLayer.objects.filter(map_id=link.map_id, layer__table_name=table).exists()
+    """True when ``table`` is currently on the map and visible in the composition.
+
+    External Map URLs only expose visible layers. Hidden layers are omitted from
+    the public style and must not be fetchable by crafting a tile URL.
+    """
+    return MapLayer.objects.filter(
+        map_id=link.map_id,
+        layer__table_name=table,
+        visible=True,
+    ).exists()
 
 
 def record_map_share_link_usage(link: MapShareLink) -> None:

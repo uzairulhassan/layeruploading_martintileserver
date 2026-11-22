@@ -1,5 +1,4 @@
 let CURRENT_MAPS = [];
-let SELECTED_SHARE_USER = null;
 let MAP_FILTER = "all";
 let MAP_SEARCH = "";
 
@@ -178,34 +177,20 @@ document.getElementById("delete-confirm").addEventListener("click", async () => 
   }
 });
 
-function openShareModal(map) {
-  document.getElementById("share-map-id").value = map.id;
-  document.getElementById("share-search").value = "";
-  document.getElementById("share-results").innerHTML = "";
-  document.getElementById("share-submit").disabled = true;
-  SELECTED_SHARE_USER = null;
-  renderShareList(map);
-  Auth.openModal("share-modal");
+function openRevokeLinkModal(mapId, linkId) {
+  document.getElementById("revoke-link-map-id").value = mapId;
+  document.getElementById("revoke-link-id").value = linkId;
+  Auth.openModal("revoke-link-modal");
 }
 
 function renderShareList(map) {
-  const list = document.getElementById("share-list");
-  const shares = map.shares || [];
-  if (!shares.length) {
-    list.innerHTML = `<li class="share-empty">Not shared with anyone yet.</li>`;
-    return;
-  }
-  list.innerHTML = shares.map((s) => Auth.renderSharePerson(s.shared_with_detail, {
-    permission: s.permission,
-    actionHtml: `<button type="button" class="btn btn-sm row-remove" data-remove-share="${s.shared_with_detail.id}">Remove</button>`,
-  })).join("");
-  list.querySelectorAll("[data-remove-share]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+  ShareUi.renderPeopleList(map?.shares || [], {
+    onRemove: async (userId) => {
       const mapId = document.getElementById("share-map-id").value;
       try {
         const res = await Auth.apiFetch(`/api/maps/${mapId}/unshare/`, {
           method: "POST",
-          body: { user_id: btn.dataset.removeShare },
+          body: { user_id: userId },
         });
         if (!res.ok) {
           throw new Error(await Toast.fromResponse(res, "Could not remove access."));
@@ -216,60 +201,46 @@ function renderShareList(map) {
       } catch (err) {
         Toast.error(err.message || "Could not remove access.");
       }
-    });
+    },
   });
 }
 
-let shareSearchTimeout;
-document.getElementById("share-search").addEventListener("input", (event) => {
-  clearTimeout(shareSearchTimeout);
-  const query = event.target.value.trim();
-  if (!query) {
-    document.getElementById("share-results").innerHTML = "";
+function openShareModal(map) {
+  if (map.my_permission !== "owner") {
+    Toast.error("Only the map owner can share this map.");
     return;
   }
-  shareSearchTimeout = setTimeout(async () => {
-    const res = await Auth.apiFetch(`/api/auth/users/?search=${encodeURIComponent(query)}`);
-    const data = await res.json();
-    const results = data.results || data;
-    const box = document.getElementById("share-results");
-    if (!results.length) {
-      box.innerHTML = `<p class="share-empty-inline muted">No users found.</p>`;
-      return;
-    }
-    box.innerHTML = `<div class="share-results-list">${results.map((u) => Auth.renderShareHit(u)).join("")}</div>`;
-    box.querySelectorAll("[data-user-id]").forEach((row) => {
-      row.addEventListener("click", () => {
-        SELECTED_SHARE_USER = results.find((u) => String(u.id) === row.dataset.userId);
-        document.getElementById("share-search").value = SELECTED_SHARE_USER.display_name || SELECTED_SHARE_USER.username;
-        box.innerHTML = "";
-        document.getElementById("share-submit").disabled = false;
-      });
-    });
-  }, 250);
-});
+  document.getElementById("share-map-id").value = map.id;
+  ShareUi.prepareOpen({
+    subtitleEl: document.getElementById("share-map-sub"),
+    subtitle: map.name
+      ? `Sharing "${map.name}"`
+      : "Share with GeoTrak Layers users or create an external link",
+  });
+  renderShareList(map);
+  ShareUi.loadShareLinks({
+    listUrl: `/api/maps/${map.id}/share-links/`,
+    includeLayerCount: true,
+    onRevoke: (linkId) => openRevokeLinkModal(map.id, linkId),
+  });
+  Auth.openModal("share-modal");
+}
 
-document.getElementById("share-submit").addEventListener("click", async () => {
-  if (!SELECTED_SHARE_USER) return;
-  const mapId = document.getElementById("share-map-id").value;
-  const permission = document.getElementById("share-permission").value;
-  try {
-    const res = await Auth.apiFetch(`/api/maps/${mapId}/share/`, {
-      method: "POST",
-      body: { shared_with: SELECTED_SHARE_USER.id, permission },
-    });
-    if (!res.ok) {
-      throw new Error(await Toast.fromResponse(res, "Could not share map."));
-    }
+ShareUi.bindModal({
+  includeLayerCount: true,
+  getResourceId: () => document.getElementById("share-map-id")?.value,
+  getRevokeResourceId: () => document.getElementById("revoke-link-map-id")?.value,
+  shareUrl: (id) => `/api/maps/${id}/share/`,
+  shareLinksUrl: (id) => `/api/maps/${id}/share-links/`,
+  revokeUrl: (id, linkId) => `/api/maps/${id}/share-links/${linkId}/`,
+  shareSuccess: "Map shared.",
+  shareError: "Could not share map.",
+  onRevoke: (mapId, linkId) => openRevokeLinkModal(mapId, linkId),
+  afterPeopleChange: async () => {
+    const mapId = document.getElementById("share-map-id").value;
     await loadMaps();
     renderShareList(findMap(mapId));
-    document.getElementById("share-submit").disabled = true;
-    SELECTED_SHARE_USER = null;
-    document.getElementById("share-search").value = "";
-    Toast.success("Map shared.");
-  } catch (err) {
-    Toast.error(err.message || "Could not share map.");
-  }
+  },
 });
 
 function openCreateMapModal() {

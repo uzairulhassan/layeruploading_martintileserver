@@ -8,7 +8,7 @@ Nginx on :8081 sends a subrequest to ``validate_tile_request`` for these tile UR
 * ``/x/<token>/{z}/{x}/{y}.pbf``  - Layer URL tiles (``LayerShareLink``).
   Companion Layer URL document: ``/x/<token>/style.json`` (Django, not auth_request).
 * ``/m/<token>/<table>/{z}/{x}/{y}.pbf``  - Map URL tiles (``MapShareLink``);
-  ``table`` must currently be on that map. Companion Map URL: ``/m/<token>/style.json``.
+  ``table`` must currently be on that map **and visible**. Companion: ``/m/<token>/style.json``.
 
 On success Django returns 204 plus ``X-Tile-Layer: <table>``, and Nginx proxies
 to Martin with *that* table. The client's own ``?layer=`` is never trusted.
@@ -116,11 +116,23 @@ def _request_user(request):
 
 
 def user_can_view_layer(user, layer: LayerInfo) -> bool:
+    """True when the signed-in user may load this layer's app tiles.
+
+    Owners, superusers, and LayerShare recipients are allowed. Users who only
+    have an in-app MapShare on a map that currently includes this layer may
+    also load tiles (so the builder is not blank), without granting Layers-list
+    ownership of the layer.
+    """
     if not user.is_active:
         return False
     if user.is_superuser or layer.owner_id == user.id:
         return True
-    return LayerShare.objects.filter(layer=layer, shared_with=user).exists()
+    if LayerShare.objects.filter(layer=layer, shared_with=user).exists():
+        return True
+    # Late import avoids circular import with maps.share_auth → models.
+    from apps.maps.models import MapLayer
+
+    return MapLayer.objects.filter(layer=layer, map__shares__shared_with=user).exists()
 
 
 # ---------------------------------------------------------------- decision

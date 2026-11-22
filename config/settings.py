@@ -97,7 +97,8 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+# Entire GeoLayers product uses Saudi Arabia (Riyadh) time — no DST.
+TIME_ZONE = "Asia/Riyadh"
 USE_I18N = True
 USE_TZ = True
 

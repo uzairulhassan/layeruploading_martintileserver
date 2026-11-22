@@ -1,7 +1,8 @@
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    TZ=Asia/Riyadh
 
 # GDAL/GEOS/PROJ are required both by GeoDjango's PostGIS backend and by the
 # ogr2ogr binary used to import uploaded shapefiles into PostGIS tables.

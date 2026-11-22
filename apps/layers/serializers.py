@@ -84,7 +84,7 @@ class LayerInfoSerializer(serializers.ModelSerializer):
 
 
 class LayerShareLinkSerializer(serializers.ModelSerializer):
-    """External Layer URL payload. ``style_url`` is what the UI copies as the Layer URL."""
+    """Public layer share-link payload. ``style_url`` is the copyable external share URL."""
 
     style_url = serializers.SerializerMethodField()
     xyz_url = serializers.SerializerMethodField()
@@ -123,7 +123,7 @@ class LayerShareLinkSerializer(serializers.ModelSerializer):
         return f"{base.rstrip('/')}/x/{obj.token}"
 
     def get_style_url(self, obj):
-        """Layer URL — Style Spec (paint/labels) for this share token."""
+        """Style Spec document for this share token (paint/labels)."""
         return f"{self._share_base(obj)}/style.json"
 
     def get_xyz_url(self, obj):
