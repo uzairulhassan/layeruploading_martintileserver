@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}Layers · GeoTrak Layers{% endblock %}
+{% block extra_head %}
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.css" rel="stylesheet">
+{% endblock %}
 {% block content %}
 <div class="workspace">
   <section class="page-hero">
@@ -149,10 +152,11 @@
   </div>
 </div>
 
-<div id="style-modal" class="modal-backdrop hidden">
+<div id="style-modal" class="modal-backdrop hidden" data-mapbox-token="{{ MAPBOX_ACCESS_TOKEN }}">
   <div class="modal modal-style" role="dialog" aria-labelledby="style-modal-title">
     <div class="modal-header">
-      <h2 id="style-modal-title">Layer style</h2>
+      <h2 id="style-modal-title">Style</h2>
+      <p class="modal-sub">Adjust how this layer looks on the map.</p>
     </div>
     <form id="style-form" class="modal-form style-form">
       <input type="hidden" id="style-id">
@@ -160,24 +164,24 @@
       <div class="style-editor">
         <div class="style-controls">
           <section class="style-panel">
-            <h3 class="style-panel-title">Paint</h3>
+            <h3 class="style-panel-title">Colors</h3>
             <div class="form-grid">
-              <div class="form-group">
-                <label for="style-fill-color">Default fill / line color</label>
+              <div class="form-group" id="style-fill-color-wrap">
+                <label for="style-fill-color">Color</label>
                 <div class="color-field">
-                  <input type="color" id="style-fill-color-picker" value="#0F2D53" aria-label="Pick fill / line color">
+                  <input type="color" id="style-fill-color-picker" value="#0F2D53" aria-label="Layer color">
                   <input type="text" id="style-fill-color" placeholder="#0F2D53" spellcheck="false">
                 </div>
               </div>
-              <div class="form-group">
-                <label for="style-stroke-color">Stroke color</label>
+              <div class="form-group" id="style-stroke-color-wrap">
+                <label for="style-stroke-color">Outline</label>
                 <div class="color-field">
-                  <input type="color" id="style-stroke-color-picker" value="#0a2140" aria-label="Pick stroke color">
+                  <input type="color" id="style-stroke-color-picker" value="#0a2140" aria-label="Outline color">
                   <input type="text" id="style-stroke-color" placeholder="#0a2140" spellcheck="false">
                 </div>
               </div>
-              <div class="form-group">
-                <label for="style-stroke-width">Stroke width</label>
+              <div class="form-group" id="style-stroke-width-wrap">
+                <label for="style-stroke-width" id="style-stroke-width-label">Width</label>
                 <input type="number" id="style-stroke-width" min="0" step="0.5" value="1">
               </div>
               <div class="form-group">
@@ -188,35 +192,39 @@
           </section>
 
           <section class="style-panel">
-            <h3 class="style-panel-title">Color by attribute</h3>
-            <p class="style-panel-hint">Color features from any attribute on this layer so the map reads without clicking every object.</p>
+            <h3 class="style-panel-title">Color by</h3>
+            <p class="style-panel-hint">Use a field to give each value its own color.</p>
             <div class="form-grid">
               <div class="form-group form-grid-span">
-                <label for="style-color-by-field">Attribute field</label>
-                <select id="style-color-by-field"><option value="">None (single color)</option></select>
+                <label for="style-color-by-field">Field</label>
+                <select id="style-color-by-field"><option value="">None</option></select>
               </div>
             </div>
             <div id="style-color-by-rows" class="style-category-rows hidden" aria-live="polite"></div>
           </section>
 
           <section id="style-marker-panel" class="style-panel hidden">
-            <h3 class="style-panel-title">Point marker</h3>
-            <p class="style-panel-hint">Optional icons for point layers. Pick one icon for all features, or different icons per attribute value. Icon colour still follows the paint / attribute colors above.</p>
+            <h3 class="style-panel-title">Markers</h3>
+            <p class="style-panel-hint">Choose how points show up on the map.</p>
             <div class="form-grid">
               <div class="form-group">
-                <label for="style-marker-type">Marker type</label>
+                <label for="style-marker-type">Type</label>
                 <select id="style-marker-type">
                   <option value="circle">Circle</option>
                   <option value="icon">Icon</option>
                 </select>
               </div>
+              <div class="form-group" id="style-marker-size-wrap">
+                <label for="style-marker-size">Size</label>
+                <input type="number" id="style-marker-size" min="0.25" max="4" step="0.05" value="1" title="1 is the default size">
+              </div>
               <div class="form-group" id="style-default-icon-wrap">
-                <label for="style-default-icon">Default icon</label>
+                <label for="style-default-icon">Icon</label>
                 <select id="style-default-icon"></select>
               </div>
               <div class="form-group form-grid-span" id="style-icon-by-wrap">
-                <label for="style-icon-by-field">Icon by attribute</label>
-                <select id="style-icon-by-field"><option value="">Same icon for all</option></select>
+                <label for="style-icon-by-field">Icon by</label>
+                <select id="style-icon-by-field"><option value="">Same for all</option></select>
               </div>
             </div>
             <div id="style-icon-by-rows" class="style-category-rows hidden" aria-live="polite"></div>
@@ -226,51 +234,56 @@
             <h3 class="style-panel-title">Labels</h3>
             <div class="form-grid">
               <div class="form-group form-grid-span">
-                <label for="label-field">Label field</label>
+                <label for="label-field">Text</label>
                 <select id="label-field"><option value="">None</option></select>
               </div>
-              <div class="form-group">
-                <label for="label-color">Label color</label>
+              <div class="form-group" id="label-color-wrap">
+                <label for="label-color">Text color</label>
                 <div class="color-field">
-                  <input type="color" id="label-color-picker" value="#0F2D53" aria-label="Pick label text color">
+                  <input type="color" id="label-color-picker" value="#0F2D53" aria-label="Label text color">
                   <input type="text" id="label-color" placeholder="#0F2D53" spellcheck="false">
                 </div>
               </div>
-              <div class="form-group">
-                <label for="label-size">Label size</label>
+              <div class="form-group" id="label-size-wrap">
+                <label for="label-size">Size</label>
                 <input type="number" id="label-size" min="8" max="36" value="12">
               </div>
             </div>
           </section>
         </div>
 
-        <aside class="style-preview-card" aria-live="polite">
+        <aside class="style-preview-card" id="style-preview-card" aria-live="polite">
           <div class="style-preview-head">
             <h3 class="style-panel-title">Preview</h3>
-            <span id="style-preview-kind" class="style-preview-kind">Line</span>
+            <div class="style-preview-head-end">
+              <span id="style-preview-kind" class="style-preview-kind">Line</span>
+              <button type="button" class="style-preview-expand-btn" id="style-preview-expand" aria-label="Expand preview" title="Expand preview">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M9 4.5H4.5V9M15 4.5h4.5V9M9 19.5H4.5V15M15 19.5h4.5V15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button type="button" class="style-preview-expand-btn hidden" id="style-preview-collapse" aria-label="Exit preview" title="Exit preview">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M4.5 9H9V4.5M15 4.5V9h4.5M4.5 15H9v4.5M15 19.5V15h4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
           </div>
           <div id="style-preview" class="style-preview" data-kind="line">
-            <svg class="style-preview-svg" viewBox="0 0 240 140" role="img" aria-label="Style preview">
-              <defs>
-                <pattern id="style-preview-grid" width="12" height="12" patternUnits="userSpaceOnUse">
-                  <path d="M 12 0 L 0 0 0 12" fill="none" stroke="currentColor" stroke-width="0.5" opacity="0.4"/>
-                </pattern>
-              </defs>
-              <rect class="style-preview-bg" x="0" y="0" width="240" height="140" fill="url(#style-preview-grid)"/>
-              <g id="style-preview-shape"></g>
-              <text id="style-preview-label" class="style-preview-label" x="120" y="124" text-anchor="middle" hidden></text>
-            </svg>
+            <div id="style-preview-map" class="style-preview-map" role="application" aria-label="Live style preview"></div>
+            <p id="style-preview-status" class="style-preview-status">Loading map...</p>
           </div>
         </aside>
       </div>
 
       <div class="modal-actions">
-        <button type="button" class="btn" data-close-modal="style-modal">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save style</button>
+        <button type="button" class="btn" id="style-cancel-btn">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
   </div>
 </div>
+<div id="style-preview-backdrop" class="style-preview-backdrop hidden" aria-hidden="true"></div>
 
 <div id="share-modal" class="modal-backdrop hidden">
   <div class="modal modal-share" role="dialog" aria-labelledby="share-layer-title">
@@ -416,6 +429,7 @@
 </div>
 {% endblock %}
 {% block extra_scripts %}
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.6.0/mapbox-gl.js"></script>
 <script src="{% static 'js/geolayers_icons.js' %}"></script>
 <script src="{% static 'js/layers.js' %}"></script>
 {% endblock %}

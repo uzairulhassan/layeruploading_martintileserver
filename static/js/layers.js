@@ -301,21 +301,27 @@ function bindColorPair(textId, pickerId, fallback, onChange) {
   });
 }
 
-function stylePreviewKind(geometryType) {
+function styleGeometryKind(geometryType) {
   const raw = String(geometryType || "").toLowerCase();
   if (raw.includes("point")) return "point";
   if (raw.includes("line")) return "line";
   return "fill";
 }
 
-let STYLE_LABEL_SAMPLE = "";
-let STYLE_LABEL_SAMPLE_FIELD = "";
-let STYLE_LABEL_SAMPLE_REQ = 0;
 let STYLE_COLOR_BY_REQ = 0;
 let STYLE_ICON_BY_REQ = 0;
 let STYLE_ACTIVE_LAYER = null;
 let STYLE_COLOR_CATEGORIES = {};
 let STYLE_ICON_CATEGORIES = {};
+let STYLE_PREVIEW_MAP = null;
+let STYLE_PREVIEW_LAYER_IDS = [];
+let STYLE_PREVIEW_SOURCE_ID = null;
+let STYLE_PREVIEW_REQ = 0;
+let STYLE_PREVIEW_TIMER = null;
+let STYLE_PREVIEW_FIT_KEY = "";
+let STYLE_PREVIEW_EXPANDED = false;
+/** Where to put the preview card back after expand (body portal). */
+let STYLE_PREVIEW_HOME = null;
 
 const CATEGORY_PALETTE = [
   "#2563eb", "#16a34a", "#ea580c", "#dc2626", "#7c3aed",
@@ -323,17 +329,9 @@ const CATEGORY_PALETTE = [
   "#9333ea", "#0d9488", "#c2410c", "#be123c", "#1d4ed8",
 ];
 
-// Catalog lives in geolayers_icons.js (loaded before this file on the layers page).
+// geolayers_icons.js loads before this file on the layers page.
 const STYLE_ICON_OPTIONS = window.GeoLayersIcons?.ICON_OPTIONS || [
   { id: "gl-poi", label: "Pin" },
-  { id: "gl-station", label: "Station" },
-  { id: "gl-underground", label: "Underground" },
-  { id: "gl-elevated", label: "Elevated" },
-  { id: "gl-bus", label: "Bus" },
-  { id: "gl-metro", label: "Metro" },
-  { id: "gl-square", label: "Square" },
-  { id: "gl-triangle", label: "Triangle" },
-  { id: "gl-diamond", label: "Diamond" },
 ];
 
 function fieldOptionsHtml(fields, selected, emptyLabel) {
@@ -372,14 +370,48 @@ function readColorByFromDom() {
   };
 }
 
+function clampMarkerSize(value, fallback = 1) {
+  const raw = parseFloat(value);
+  if (!Number.isFinite(raw)) return fallback;
+  return Math.min(4, Math.max(0.25, raw));
+}
+
+function readMarkerSizeFromDom() {
+  return clampMarkerSize(document.getElementById("style-marker-size")?.value, 1);
+}
+
+function normalizeIconCategory(raw, fallbackIcon = "gl-poi", fallbackSize = 1) {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return {
+      icon: raw.icon || fallbackIcon,
+      size: clampMarkerSize(raw.size, fallbackSize),
+    };
+  }
+  if (typeof raw === "string" && raw) {
+    return { icon: raw, size: fallbackSize };
+  }
+  return { icon: fallbackIcon, size: fallbackSize };
+}
+
+function normalizeIconCategoryMap(categories, fallbackIcon = "gl-poi", fallbackSize = 1) {
+  const out = {};
+  Object.entries(categories || {}).forEach(([key, raw]) => {
+    out[key] = normalizeIconCategory(raw, fallbackIcon, fallbackSize);
+  });
+  return out;
+}
+
 function readMarkerFromDom() {
-  const markerPanel = document.getElementById("style-marker-panel");
-  if (!markerPanel || markerPanel.classList.contains("hidden")) return null;
-  if ((document.getElementById("style-marker-type")?.value || "circle") !== "icon") return null;
+  if (currentStyleKind() !== "point") return null;
+  const type = (document.getElementById("style-marker-type")?.value || "circle") === "icon"
+    ? "icon"
+    : "circle";
+  const size = readMarkerSizeFromDom();
+  if (type !== "icon") return { type: "circle", size };
 
   const defaultIcon = document.getElementById("style-default-icon")?.value || "gl-poi";
   const field = document.getElementById("style-icon-by-field")?.value || "";
-  const marker = { type: "icon", icon: defaultIcon };
+  const marker = { type: "icon", icon: defaultIcon, size };
   if (!field) return marker;
 
   const container = document.getElementById("style-icon-by-rows");
@@ -388,10 +420,21 @@ function readMarkerFromDom() {
   keys.forEach((key, idx) => {
     const row = container?.querySelector(`[data-icon-index="${idx}"]`);
     const select = row?.querySelector("select");
-    categories[key] = select?.value || STYLE_ICON_CATEGORIES[key] || defaultIcon;
+    const sizeInput = row?.querySelector("input[data-icon-size]");
+    const fallback = normalizeIconCategory(
+      STYLE_ICON_CATEGORIES[key],
+      defaultIcon,
+      size,
+    );
+    categories[key] = {
+      icon: select?.value || fallback.icon || defaultIcon,
+      size: clampMarkerSize(sizeInput?.value, fallback.size),
+    };
   });
-  if (!Object.keys(categories).length) Object.assign(categories, STYLE_ICON_CATEGORIES);
-  marker.iconBy = { field, default: defaultIcon, categories };
+  if (!Object.keys(categories).length) {
+    Object.assign(categories, normalizeIconCategoryMap(STYLE_ICON_CATEGORIES, defaultIcon, size));
+  }
+  marker.iconBy = { field, default: defaultIcon, defaultSize: size, categories };
   return marker;
 }
 
@@ -423,7 +466,7 @@ function renderColorByRows(values, categories) {
   if (!container) return;
   const keys = values || [];
   if (!keys.length) {
-    container.innerHTML = `<p class="style-panel-hint">No distinct values found for this field.</p>`;
+    container.innerHTML = `<p class="style-panel-hint">No values found for this field.</p>`;
     container.classList.remove("hidden");
     return;
   }
@@ -454,25 +497,27 @@ function renderColorByRows(values, categories) {
   container._categoryKeys = keys;
 }
 
-function renderIconByRows(values, categories, defaultIcon) {
+function renderIconByRows(values, categories, defaultIcon, defaultSize = 1) {
   const container = document.getElementById("style-icon-by-rows");
   if (!container) return;
   const keys = values || [];
   if (!keys.length) {
-    container.innerHTML = `<p class="style-panel-hint">No distinct values found for this field.</p>`;
+    container.innerHTML = `<p class="style-panel-hint">No values found for this field.</p>`;
     container.classList.remove("hidden");
     return;
   }
+  const baseSize = clampMarkerSize(defaultSize, 1);
   STYLE_ICON_CATEGORIES = {};
   container.innerHTML = keys.map((key, idx) => {
-    const icon = categories[key] || defaultIcon || "gl-poi";
-    STYLE_ICON_CATEGORIES[key] = icon;
+    const spec = normalizeIconCategory(categories[key], defaultIcon || "gl-poi", baseSize);
+    STYLE_ICON_CATEGORIES[key] = spec;
     const safe = Auth.escapeHtml(key);
     const id = `icon-by-${idx}`;
     return `
-      <div class="style-category-row" data-icon-index="${idx}">
+      <div class="style-category-row is-icon" data-icon-index="${idx}">
         <label for="${id}" title="${safe}">${safe}</label>
-        <select id="${id}" aria-label="Icon for ${safe}">${iconOptionsHtml(icon)}</select>
+        <select id="${id}" aria-label="Icon for ${safe}">${iconOptionsHtml(spec.icon)}</select>
+        <input type="number" id="${id}-size" data-icon-size min="0.25" max="4" step="0.05" value="${spec.size}" aria-label="Size for ${safe}" title="Size">
       </div>`;
   }).join("");
   container.classList.remove("hidden");
@@ -482,9 +527,26 @@ function renderIconByRows(values, categories, defaultIcon) {
       const row = select.closest("[data-icon-index]");
       const idx = Number(row?.dataset.iconIndex);
       const key = keys[idx];
-      if (key) STYLE_ICON_CATEGORIES[key] = select.value;
+      if (!key) return;
+      const prev = normalizeIconCategory(STYLE_ICON_CATEGORIES[key], defaultIcon, baseSize);
+      STYLE_ICON_CATEGORIES[key] = { icon: select.value, size: prev.size };
       updateStylePreview();
     });
+  });
+  container.querySelectorAll("input[data-icon-size]").forEach((input) => {
+    const sync = () => {
+      const row = input.closest("[data-icon-index]");
+      const idx = Number(row?.dataset.iconIndex);
+      const key = keys[idx];
+      if (!key) return;
+      const prev = normalizeIconCategory(STYLE_ICON_CATEGORIES[key], defaultIcon, baseSize);
+      const size = clampMarkerSize(input.value, prev.size);
+      input.value = String(size);
+      STYLE_ICON_CATEGORIES[key] = { icon: prev.icon, size };
+      updateStylePreview();
+    };
+    input.addEventListener("input", sync);
+    input.addEventListener("change", sync);
   });
 }
 
@@ -505,22 +567,25 @@ async function refreshColorByValues(preferredCategories = {}) {
   if (!field) {
     STYLE_COLOR_CATEGORIES = {};
     clearCategoryRows("style-color-by-rows");
+    syncStyleFormVisibility();
     updateStylePreview();
     return;
   }
   if (container) {
-    container.innerHTML = `<p class="style-panel-hint">Loading values…</p>`;
+    container.innerHTML = `<p class="style-panel-hint">Loading values...</p>`;
     container.classList.remove("hidden");
   }
   const values = await fetchDistinctAttributeValues(layerId, field);
   if (reqId !== STYLE_COLOR_BY_REQ) return;
   if (!values) {
     if (container) {
-      container.innerHTML = `<p class="style-panel-hint">Could not load attribute values.</p>`;
+      container.innerHTML = `<p class="style-panel-hint">Could not load values.</p>`;
     }
+    syncStyleFormVisibility();
     return;
   }
   renderColorByRows(values, preferredCategories);
+  syncStyleFormVisibility();
   updateStylePreview();
 }
 
@@ -529,158 +594,362 @@ async function refreshIconByValues(preferredCategories = {}) {
   const field = document.getElementById("style-icon-by-field")?.value || "";
   const container = document.getElementById("style-icon-by-rows");
   const defaultIcon = document.getElementById("style-default-icon")?.value || "gl-poi";
+  const defaultSize = readMarkerSizeFromDom();
   const reqId = ++STYLE_ICON_BY_REQ;
   if (!field) {
     STYLE_ICON_CATEGORIES = {};
     clearCategoryRows("style-icon-by-rows");
+    syncStyleFormVisibility();
     updateStylePreview();
     return;
   }
   if (container) {
-    container.innerHTML = `<p class="style-panel-hint">Loading values…</p>`;
+    container.innerHTML = `<p class="style-panel-hint">Loading values...</p>`;
     container.classList.remove("hidden");
   }
   const values = await fetchDistinctAttributeValues(layerId, field);
   if (reqId !== STYLE_ICON_BY_REQ) return;
   if (!values) {
     if (container) {
-      container.innerHTML = `<p class="style-panel-hint">Could not load attribute values.</p>`;
+      container.innerHTML = `<p class="style-panel-hint">Could not load values.</p>`;
     }
+    syncStyleFormVisibility();
     return;
   }
-  renderIconByRows(values, preferredCategories, defaultIcon);
+  renderIconByRows(values, preferredCategories, defaultIcon, defaultSize);
+  syncStyleFormVisibility();
   updateStylePreview();
 }
 
-function syncMarkerPanelVisibility(kind) {
-  const panel = document.getElementById("style-marker-panel");
-  if (!panel) return;
-  const show = kind === "point";
-  panel.classList.toggle("hidden", !show);
-  const markerType = document.getElementById("style-marker-type")?.value || "circle";
-  const showIcons = show && markerType === "icon";
-  document.getElementById("style-default-icon-wrap")?.classList.toggle("hidden", !showIcons);
-  document.getElementById("style-icon-by-wrap")?.classList.toggle("hidden", !showIcons);
-  if (!showIcons) {
-    document.getElementById("style-icon-by-rows")?.classList.add("hidden");
+function setStyleFieldHidden(id, hidden) {
+  document.getElementById(id)?.classList.toggle("hidden", !!hidden);
+}
+
+function currentStyleKind() {
+  return document.getElementById("style-preview")?.dataset.kind || "line";
+}
+
+function isColorByActive() {
+  return Boolean(document.getElementById("style-color-by-field")?.value);
+}
+
+function isLabelActive() {
+  return Boolean(document.getElementById("label-field")?.value);
+}
+
+function isPointIconMode() {
+  return (
+    currentStyleKind() === "point" &&
+    (document.getElementById("style-marker-type")?.value || "circle") === "icon"
+  );
+}
+
+/** Toggle style controls to match share_style paint for the active geometry. */
+function syncStyleFormVisibility() {
+  const kind = currentStyleKind();
+  const colorBy = isColorByActive();
+  const labelOn = isLabelActive();
+  const pointIcon = isPointIconMode();
+  const isPoint = kind === "point";
+  const isLine = kind === "line";
+  const isFill = kind === "fill";
+
+  setStyleFieldHidden("style-fill-color-wrap", colorBy);
+  setStyleFieldHidden("style-stroke-color-wrap", !isFill);
+  setStyleFieldHidden(
+    "style-stroke-width-wrap",
+    pointIcon || !(isLine || isFill || isPoint),
+  );
+
+  const widthLabel = document.getElementById("style-stroke-width-label");
+  if (widthLabel) {
+    if (isFill) widthLabel.textContent = "Outline width";
+    else if (isPoint) widthLabel.textContent = "Ring width";
+    else widthLabel.textContent = "Width";
+  }
+
+  document.getElementById("style-marker-panel")?.classList.toggle("hidden", !isPoint);
+  const showIcons = isPoint && pointIcon;
+  const iconByOn = showIcons && Boolean(document.getElementById("style-icon-by-field")?.value);
+  const hasAttributeFields =
+    (document.getElementById("style-color-by-field")?.options?.length || 0) > 1;
+  // Same-for-all: show Icon + Size. Icon by attribute: hide those; each row owns icon + size.
+  setStyleFieldHidden("style-default-icon-wrap", !showIcons || iconByOn);
+  setStyleFieldHidden("style-marker-size-wrap", !(isPoint && (!pointIcon || !iconByOn)));
+  setStyleFieldHidden("style-icon-by-wrap", !showIcons || !hasAttributeFields);
+  const iconByRows = document.getElementById("style-icon-by-rows");
+  if (!showIcons || !hasAttributeFields || !iconByOn) {
+    iconByRows?.classList.add("hidden");
+  } else if (iconByRows?.childElementCount) {
+    iconByRows.classList.remove("hidden");
+  }
+
+  setStyleFieldHidden("label-color-wrap", !labelOn);
+  setStyleFieldHidden("label-size-wrap", !labelOn);
+}
+
+function buildStyleDraftPayload() {
+  const values = readStyleFormValues();
+  const existingStyle = STYLE_ACTIVE_LAYER?.style || {};
+  const kind = currentStyleKind();
+  const style = {
+    color: values.color,
+    opacity: values.opacity,
+  };
+  if (kind === "fill") {
+    style.strokeColor = values.strokeColor;
+    style.strokeWidth = values.strokeWidth;
+  } else if (kind === "line") {
+    style.strokeWidth = values.strokeWidth;
+  } else if (kind === "point" && values.marker?.type !== "icon") {
+    style.strokeWidth = values.strokeWidth;
+  }
+  if (existingStyle.useSourceColors && !values.colorBy) {
+    style.useSourceColors = true;
+  }
+  if (values.colorBy) style.colorBy = values.colorBy;
+  if (kind === "point" && values.marker) style.marker = values.marker;
+  const labelConfig = values.labelField
+    ? {
+        field: values.labelField,
+        color: values.labelColor,
+        size: values.labelSize,
+      }
+    : {};
+  return { style, label_config: labelConfig, values };
+}
+
+function updateStylePreviewKindBadge(values) {
+  const kindBadge = document.getElementById("style-preview-kind");
+  if (!kindBadge) return;
+  const kind = currentStyleKind();
+  const labels = { point: "Point", line: "Line", fill: "Polygon" };
+  const base = labels[kind] || "Layer";
+  kindBadge.textContent = values?.colorBy?.field
+    ? `${base} by ${values.colorBy.field}`
+    : base;
+}
+
+function setStylePreviewStatus(text) {
+  const el = document.getElementById("style-preview-status");
+  if (!el) return;
+  if (!text) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    return;
+  }
+  el.textContent = text;
+  el.classList.remove("hidden");
+}
+
+function clearStylePreviewOverlay() {
+  if (!STYLE_PREVIEW_MAP) return;
+  STYLE_PREVIEW_LAYER_IDS.forEach((id) => {
+    if (STYLE_PREVIEW_MAP.getLayer(id)) STYLE_PREVIEW_MAP.removeLayer(id);
+  });
+  STYLE_PREVIEW_LAYER_IDS = [];
+  if (STYLE_PREVIEW_SOURCE_ID && STYLE_PREVIEW_MAP.getSource(STYLE_PREVIEW_SOURCE_ID)) {
+    STYLE_PREVIEW_MAP.removeSource(STYLE_PREVIEW_SOURCE_ID);
+  }
+  STYLE_PREVIEW_SOURCE_ID = null;
+}
+
+function destroyStylePreviewMap() {
+  clearTimeout(STYLE_PREVIEW_TIMER);
+  STYLE_PREVIEW_TIMER = null;
+  if (STYLE_PREVIEW_MAP) {
+    STYLE_PREVIEW_MAP.remove();
+    STYLE_PREVIEW_MAP = null;
+  }
+  STYLE_PREVIEW_LAYER_IDS = [];
+  STYLE_PREVIEW_SOURCE_ID = null;
+  STYLE_PREVIEW_FIT_KEY = "";
+}
+
+function fitStylePreviewToBounds(bounds, layerId) {
+  if (!STYLE_PREVIEW_MAP || !Array.isArray(bounds) || bounds.length !== 4) return;
+  const key = `${layerId}:${bounds.join(",")}`;
+  if (STYLE_PREVIEW_FIT_KEY === key) return;
+  const [minx, miny, maxx, maxy] = bounds.map(Number);
+  if (![minx, miny, maxx, maxy].every(Number.isFinite)) return;
+  STYLE_PREVIEW_FIT_KEY = key;
+  STYLE_PREVIEW_MAP.fitBounds(
+    [
+      [minx, miny],
+      [maxx, maxy],
+    ],
+    { padding: 36, maxZoom: 14, duration: 0 },
+  );
+}
+
+function applyStylePreviewPaint(payload) {
+  if (!STYLE_PREVIEW_MAP || !payload?.xyz_url) return;
+  clearStylePreviewOverlay();
+
+  const sourceId = payload.source_id || `preview-src-${STYLE_ACTIVE_LAYER?.id || "layer"}`;
+  STYLE_PREVIEW_MAP.addSource(sourceId, {
+    type: "vector",
+    tiles: [payload.xyz_url],
+    minzoom: 0,
+    maxzoom: 22,
+  });
+  STYLE_PREVIEW_SOURCE_ID = sourceId;
+
+  window.GeoLayersIcons?.ensureGeoLayersIcons(
+    STYLE_PREVIEW_MAP,
+    payload.required_icons || [],
+  );
+
+  (payload.style_layers || []).forEach((layer) => {
+    if (!layer?.id) return;
+    STYLE_PREVIEW_MAP.addLayer(layer);
+    STYLE_PREVIEW_LAYER_IDS.push(layer.id);
+  });
+
+  if (payload.bounds) {
+    fitStylePreviewToBounds(payload.bounds, STYLE_ACTIVE_LAYER?.id);
   }
 }
 
-function truncatePreviewLabel(text, maxLen = 28) {
-  const value = String(text || "").trim();
-  if (!value) return "";
-  if (value.length <= maxLen) return value;
-  return `${value.slice(0, maxLen - 1)}…`;
+async function ensureStylePreviewMap() {
+  const container = document.getElementById("style-preview-map");
+  const modal = document.getElementById("style-modal");
+  if (!container || typeof mapboxgl === "undefined") {
+    setStylePreviewStatus("Map preview unavailable.");
+    return null;
+  }
+  if (STYLE_PREVIEW_MAP) {
+    STYLE_PREVIEW_MAP.resize();
+    return STYLE_PREVIEW_MAP;
+  }
+
+  const token = (modal?.dataset.mapboxToken || "").trim();
+  if (!token) {
+    setStylePreviewStatus("Mapbox token required for live preview.");
+    return null;
+  }
+
+  mapboxgl.accessToken = token;
+  setStylePreviewStatus("Loading map...");
+
+  STYLE_PREVIEW_MAP = new mapboxgl.Map({
+    container,
+    style: "mapbox://styles/mapbox/streets-v12",
+    center: [46.6753, 24.7136],
+    zoom: 11,
+    attributionControl: false,
+    interactive: true,
+  });
+  STYLE_PREVIEW_MAP.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+
+  await new Promise((resolve) => {
+    if (STYLE_PREVIEW_MAP.isStyleLoaded()) resolve();
+    else STYLE_PREVIEW_MAP.once("load", resolve);
+  });
+
+  setStylePreviewStatus("");
+  return STYLE_PREVIEW_MAP;
 }
 
-function previewCategoryColors(values) {
-  const cats = values.colorBy?.categories || {};
-  const colors = Object.values(cats);
-  if (colors.length) return colors.slice(0, 5);
-  return [values.color];
+async function refreshStylePreviewNow() {
+  const layer = STYLE_ACTIVE_LAYER;
+  if (!layer?.id) return;
+  const draft = buildStyleDraftPayload();
+  updateStylePreviewKindBadge(draft.values);
+
+  const reqId = ++STYLE_PREVIEW_REQ;
+  setStylePreviewStatus("Updating style...");
+  try {
+    const map = await ensureStylePreviewMap();
+    if (!map || reqId !== STYLE_PREVIEW_REQ) return;
+
+    const res = await Auth.apiFetch(`/api/layers/${layer.id}/preview-style/`, {
+      method: "POST",
+      body: {
+        style: draft.style,
+        label_config: draft.label_config,
+      },
+    });
+    if (reqId !== STYLE_PREVIEW_REQ) return;
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not load preview."));
+    }
+    const payload = await res.json();
+    if (reqId !== STYLE_PREVIEW_REQ) return;
+
+    applyStylePreviewPaint(payload);
+    setStylePreviewStatus("");
+    requestAnimationFrame(() => STYLE_PREVIEW_MAP?.resize());
+  } catch (err) {
+    if (reqId !== STYLE_PREVIEW_REQ) return;
+    setStylePreviewStatus(err.message || "Preview failed.");
+  }
 }
 
 function updateStylePreview() {
-  const preview = document.getElementById("style-preview");
-  const shape = document.getElementById("style-preview-shape");
-  const labelEl = document.getElementById("style-preview-label");
-  const kindBadge = document.getElementById("style-preview-kind");
-  if (!preview || !shape || !labelEl) return;
-
-  const kind = preview.dataset.kind || "line";
-  const values = readStyleFormValues();
-  const strokeWidth = Math.max(values.strokeWidth, kind === "line" ? 1 : 0);
-  const colors = previewCategoryColors(values);
-
-  const labels = { point: "Point", line: "Line", fill: "Polygon" };
-  if (kindBadge) {
-    const extra = values.colorBy?.field ? ` · by ${values.colorBy.field}` : "";
-    kindBadge.textContent = `${labels[kind] || "Layer"}${extra}`;
-  }
-
-  let markup = "";
-  if (kind === "point") {
-    const useIcon = values.marker?.type === "icon";
-    markup = colors.map((color, idx) => {
-      const cx = 40 + idx * 40;
-      if (useIcon) {
-        return `<path d="M${cx} 40 l10 8 v14 h-20 v-14 z" fill="${color}" fill-opacity="${values.opacity}"
-          stroke="${values.strokeColor}" stroke-width="1"/>`;
-      }
-      return `<circle cx="${cx}" cy="64" r="11"
-        fill="${color}" fill-opacity="${values.opacity}"
-        stroke="${values.strokeColor}" stroke-width="${Math.max(strokeWidth, 1)}"/>`;
-    }).join("");
-  } else if (kind === "line") {
-    markup = colors.map((color, idx) => {
-      const y = 36 + idx * 16;
-      return `<path d="M24 ${y + 40} C 60 ${y}, 96 ${y}, 120 ${y + 20} S 180 ${y + 50}, 216 ${y}"
-        fill="none" stroke="${color}" stroke-opacity="${values.opacity}"
-        stroke-width="${Math.max(strokeWidth, 1.5)}" stroke-linecap="round" stroke-linejoin="round"/>`;
-    }).join("");
-  } else {
-    const color = colors[0] || values.color;
-    markup = `
-      <path d="M40 100 L82 36 L144 48 L200 30 L214 100 Z"
-        fill="${color}" fill-opacity="${values.opacity}"
-        stroke="${values.strokeColor}" stroke-width="${Math.max(strokeWidth, 1)}"
-        stroke-linejoin="round"/>
-    `;
-  }
-  shape.innerHTML = markup;
-
-  const hasSample =
-    values.labelField &&
-    STYLE_LABEL_SAMPLE_FIELD === values.labelField &&
-    STYLE_LABEL_SAMPLE;
-  if (hasSample) {
-    labelEl.textContent = truncatePreviewLabel(STYLE_LABEL_SAMPLE);
-    labelEl.setAttribute("fill", values.labelColor);
-    labelEl.setAttribute("font-size", String(values.labelSize));
-    labelEl.removeAttribute("hidden");
-  } else {
-    labelEl.textContent = "";
-    labelEl.setAttribute("hidden", "");
-  }
+  clearTimeout(STYLE_PREVIEW_TIMER);
+  STYLE_PREVIEW_TIMER = window.setTimeout(() => {
+    refreshStylePreviewNow();
+  }, 280);
 }
 
-async function refreshStyleLabelSample() {
-  const layerId = document.getElementById("style-id").value;
-  const field = document.getElementById("label-field").value;
-  const reqId = ++STYLE_LABEL_SAMPLE_REQ;
+function setStylePreviewExpanded(expanded) {
+  STYLE_PREVIEW_EXPANDED = !!expanded;
+  const card = document.getElementById("style-preview-card");
+  const backdrop = document.getElementById("style-preview-backdrop");
+  const expandBtn = document.getElementById("style-preview-expand");
+  const collapseBtn = document.getElementById("style-preview-collapse");
 
-  if (!layerId || !field) {
-    STYLE_LABEL_SAMPLE = "";
-    STYLE_LABEL_SAMPLE_FIELD = "";
-    updateStylePreview();
-    return;
+  if (card) {
+    if (STYLE_PREVIEW_EXPANDED) {
+      // Move above the style-modal stacking context so the glassy backdrop can sit under the card.
+      if (!STYLE_PREVIEW_HOME) {
+        STYLE_PREVIEW_HOME = { parent: card.parentNode, next: card.nextSibling };
+        const slot = document.createElement("div");
+        slot.id = "style-preview-slot";
+        slot.className = "style-preview-slot";
+        slot.setAttribute("aria-hidden", "true");
+        STYLE_PREVIEW_HOME.parent.insertBefore(slot, card);
+        document.body.appendChild(card);
+      }
+      card.classList.add("is-expanded");
+    } else {
+      card.classList.remove("is-expanded");
+      if (STYLE_PREVIEW_HOME?.parent) {
+        const slot = document.getElementById("style-preview-slot");
+        if (slot?.parentNode) {
+          slot.parentNode.replaceChild(card, slot);
+        } else if (STYLE_PREVIEW_HOME.next?.parentNode === STYLE_PREVIEW_HOME.parent) {
+          STYLE_PREVIEW_HOME.parent.insertBefore(card, STYLE_PREVIEW_HOME.next);
+        } else {
+          STYLE_PREVIEW_HOME.parent.appendChild(card);
+        }
+        STYLE_PREVIEW_HOME = null;
+      }
+    }
   }
 
-  STYLE_LABEL_SAMPLE_FIELD = field;
-  STYLE_LABEL_SAMPLE = "";
-  updateStylePreview();
+  backdrop?.classList.toggle("hidden", !STYLE_PREVIEW_EXPANDED);
+  expandBtn?.classList.toggle("hidden", STYLE_PREVIEW_EXPANDED);
+  collapseBtn?.classList.toggle("hidden", !STYLE_PREVIEW_EXPANDED);
+  if (backdrop) backdrop.setAttribute("aria-hidden", STYLE_PREVIEW_EXPANDED ? "false" : "true");
+  requestAnimationFrame(() => {
+    STYLE_PREVIEW_MAP?.resize();
+  });
+}
 
-  const res = await Auth.apiFetch(
-    `/api/layers/${layerId}/sample-attribute/?field=${encodeURIComponent(field)}`
-  );
-  if (reqId !== STYLE_LABEL_SAMPLE_REQ) return;
-
-  if (!res.ok) {
-    STYLE_LABEL_SAMPLE = "";
-    updateStylePreview();
-    return;
-  }
-  const body = await res.json().catch(() => ({}));
-  STYLE_LABEL_SAMPLE = (body.value && String(body.value).trim()) || "";
-  STYLE_LABEL_SAMPLE_FIELD = field;
-  updateStylePreview();
+function closeStyleModal() {
+  setStylePreviewExpanded(false);
+  destroyStylePreviewMap();
+  STYLE_ACTIVE_LAYER = null;
+  Auth.closeModal("style-modal");
 }
 
 function openStyleModal(layer) {
   STYLE_ACTIVE_LAYER = layer;
   document.getElementById("style-id").value = layer.id;
 
-  const kind = stylePreviewKind(layer.geometry_type);
+  const kind = styleGeometryKind(layer.geometry_type);
   const preview = document.getElementById("style-preview");
   if (preview) preview.dataset.kind = kind;
 
@@ -694,14 +963,19 @@ function openStyleModal(layer) {
   const colorBy = style.colorBy && typeof style.colorBy === "object" ? style.colorBy : null;
   const colorBySelect = document.getElementById("style-color-by-field");
   if (colorBySelect) {
-    colorBySelect.innerHTML = fieldOptionsHtml(fields, colorBy?.field || "", "None (single color)");
+    colorBySelect.innerHTML = fieldOptionsHtml(fields, colorBy?.field || "", "None");
   }
 
   const marker = style.marker && typeof style.marker === "object" ? style.marker : {};
   const markerType = document.getElementById("style-marker-type");
+  const markerSize = document.getElementById("style-marker-size");
   const defaultIcon = document.getElementById("style-default-icon");
   const iconBySelect = document.getElementById("style-icon-by-field");
   if (markerType) markerType.value = marker.type === "icon" ? "icon" : "circle";
+  if (markerSize) {
+    const size = Number(marker.size);
+    markerSize.value = Number.isFinite(size) ? Math.min(4, Math.max(0.25, size)) : 1;
+  }
   if (defaultIcon) {
     defaultIcon.innerHTML = iconOptionsHtml(marker.icon || "gl-poi");
     defaultIcon.value = marker.icon || "gl-poi";
@@ -710,71 +984,68 @@ function openStyleModal(layer) {
     iconBySelect.innerHTML = fieldOptionsHtml(
       fields,
       marker.iconBy?.field || "",
-      "Same icon for all",
+      "Same for all",
     );
   }
-  syncMarkerPanelVisibility(kind);
 
   const labelSelect = document.getElementById("label-field");
   labelSelect.innerHTML = fieldOptionsHtml(fields, "", "None");
-
   const labelConfig = layer.label_config || {};
   labelSelect.value = labelConfig.field || "";
   setColorPair("label-color", "label-color-picker", labelConfig.color, "#0F2D53");
   document.getElementById("label-size").value = labelConfig.size || 12;
 
+  const hasAttributes = fields.length > 0;
+  colorBySelect?.closest(".style-panel")?.classList.toggle("hidden", !hasAttributes);
+  labelSelect.closest(".style-panel")?.classList.toggle("hidden", !hasAttributes);
+  if (!hasAttributes) {
+    if (colorBySelect) colorBySelect.value = "";
+    labelSelect.value = "";
+  }
+
   const canEdit = layer.my_permission === "owner" || layer.my_permission === "edit";
   document.getElementById("style-form").querySelectorAll("input,select,button[type=submit]").forEach((el) => {
     el.disabled = !canEdit;
   });
+  // Keep expand/collapse usable while editing is locked.
+  document.getElementById("style-preview-expand").disabled = false;
+  document.getElementById("style-preview-collapse").disabled = false;
 
-  STYLE_LABEL_SAMPLE = "";
-  STYLE_LABEL_SAMPLE_FIELD = "";
   STYLE_COLOR_CATEGORIES = { ...(colorBy?.categories || {}) };
-  STYLE_ICON_CATEGORIES = { ...(marker.iconBy?.categories || {}) };
-  updateStylePreview();
+  STYLE_ICON_CATEGORIES = normalizeIconCategoryMap(
+    marker.iconBy?.categories || {},
+    marker.icon || "gl-poi",
+    Number.isFinite(Number(marker.size)) ? Number(marker.size) : 1,
+  );
+  clearCategoryRows("style-color-by-rows");
+  clearCategoryRows("style-icon-by-rows");
+  STYLE_PREVIEW_FIT_KEY = "";
+  setStylePreviewExpanded(false);
+  syncStyleFormVisibility();
   Auth.openModal("style-modal");
-  refreshStyleLabelSample();
+  updateStylePreview();
   refreshColorByValues(colorBy?.categories || {});
   if (kind === "point" && marker.type === "icon" && marker.iconBy?.field) {
     refreshIconByValues(marker.iconBy.categories || {});
-  } else {
-    document.getElementById("style-icon-by-rows")?.classList.add("hidden");
   }
 }
 
 document.getElementById("style-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const id = document.getElementById("style-id").value;
-  const values = readStyleFormValues();
-  const existingStyle = STYLE_ACTIVE_LAYER?.style || {};
-  const style = {
-    color: values.color,
-    strokeColor: values.strokeColor,
-    strokeWidth: values.strokeWidth,
-    opacity: values.opacity,
-  };
-  // Preserve KML source colours only when the user has not switched to color-by-attribute.
-  if (existingStyle.useSourceColors && !values.colorBy) {
-    style.useSourceColors = true;
-  }
-  if (values.colorBy) style.colorBy = values.colorBy;
-  if (values.marker?.type === "icon") style.marker = values.marker;
-  const payload = {
-    style,
-    label_config: {
-      field: values.labelField,
-      color: values.labelColor,
-      size: values.labelSize,
-    },
-  };
+  const payload = buildStyleDraftPayload();
   try {
-    const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "PATCH", body: payload });
+    const res = await Auth.apiFetch(`/api/layers/${id}/`, {
+      method: "PATCH",
+      body: {
+        style: payload.style,
+        label_config: payload.label_config,
+      },
+    });
     if (!res.ok) {
       throw new Error(await Toast.fromResponse(res, "Could not save style."));
     }
-    STYLE_ACTIVE_LAYER = null;
-    Auth.closeModal("style-modal");
+    closeStyleModal();
     await loadLayers();
     Toast.success("Style saved.");
   } catch (err) {
@@ -782,28 +1053,57 @@ document.getElementById("style-form").addEventListener("submit", async (event) =
   }
 });
 
-["style-stroke-width", "style-opacity", "label-size"].forEach((id) => {
+["style-stroke-width", "style-opacity", "style-marker-size", "label-size"].forEach((id) => {
   const el = document.getElementById(id);
   el?.addEventListener("input", updateStylePreview);
   el?.addEventListener("change", updateStylePreview);
 });
-document.getElementById("label-field")?.addEventListener("change", refreshStyleLabelSample);
+document.getElementById("label-field")?.addEventListener("change", () => {
+  syncStyleFormVisibility();
+  updateStylePreview();
+});
 document.getElementById("style-color-by-field")?.addEventListener("change", () => {
   STYLE_COLOR_CATEGORIES = {};
+  syncStyleFormVisibility();
   refreshColorByValues();
 });
 document.getElementById("style-marker-type")?.addEventListener("change", () => {
-  const kind = document.getElementById("style-preview")?.dataset.kind || "point";
-  syncMarkerPanelVisibility(kind);
+  syncStyleFormVisibility();
   if (document.getElementById("style-marker-type").value === "icon") {
     refreshIconByValues(STYLE_ICON_CATEGORIES);
+    return;
   }
+  STYLE_ICON_CATEGORIES = {};
+  clearCategoryRows("style-icon-by-rows");
   updateStylePreview();
 });
 document.getElementById("style-default-icon")?.addEventListener("change", updateStylePreview);
 document.getElementById("style-icon-by-field")?.addEventListener("change", () => {
   STYLE_ICON_CATEGORIES = {};
   refreshIconByValues();
+});
+
+document.getElementById("style-cancel-btn")?.addEventListener("click", closeStyleModal);
+document.getElementById("style-preview-expand")?.addEventListener("click", () => {
+  setStylePreviewExpanded(true);
+});
+document.getElementById("style-preview-collapse")?.addEventListener("click", () => {
+  setStylePreviewExpanded(false);
+});
+document.getElementById("style-preview-backdrop")?.addEventListener("click", () => {
+  setStylePreviewExpanded(false);
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (STYLE_PREVIEW_EXPANDED) {
+    event.preventDefault();
+    setStylePreviewExpanded(false);
+    return;
+  }
+  const modal = document.getElementById("style-modal");
+  if (modal && !modal.classList.contains("hidden")) {
+    closeStyleModal();
+  }
 });
 
 // ---- Share (people + Layer URL) ----

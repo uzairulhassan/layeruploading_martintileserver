@@ -91,8 +91,21 @@ def _generate_table_name() -> str:
 
 
 def _ensure_schema_exists(schema_name: str):
+    """Ensure the layer schema exists and new tables are readable by Martin."""
     with connection.cursor() as cursor:
         cursor.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"')
+        cursor.execute(f'GRANT USAGE ON SCHEMA "{schema_name}" TO martin_reader')
+        # Applies to tables this role creates later (ogr2ogr / KML import).
+        cursor.execute(
+            f'ALTER DEFAULT PRIVILEGES IN SCHEMA "{schema_name}" '
+            f"GRANT SELECT ON TABLES TO martin_reader"
+        )
+
+
+def _grant_martin_read(schema_name: str, table_name: str):
+    """Martin serves tiles as ``martin_reader`` via SECURITY INVOKER geolayers_tile."""
+    with connection.cursor() as cursor:
+        cursor.execute(f'GRANT SELECT ON "{schema_name}"."{table_name}" TO martin_reader')
 
 
 def _ensure_spatial_index(schema_name: str, table_name: str):
@@ -104,6 +117,7 @@ def _ensure_spatial_index(schema_name: str, table_name: str):
             f'ON "{schema_name}"."{table_name}" USING GIST (geom)'
         )
         cursor.execute(f'ANALYZE "{schema_name}"."{table_name}"')
+    _grant_martin_read(schema_name, table_name)
 
 
 def _run_ogr2ogr(shp_path: Path, schema_name: str, table_name: str):
@@ -235,33 +249,6 @@ def delete_layer(layer: LayerInfo):
 def delete_layer_group(group: LayerGroup):
     """Delete a KML/KMZ group; cascaded layers drop their tables via signal."""
     group.delete()
-
-
-def sample_attribute_value(layer: LayerInfo, field_name: str) -> str | None:
-    """Return one non-empty sample value from ``field_name`` for style previews.
-
-    ``field_name`` must appear in the layer's recorded ``attribute_schema`` so
-    identifiers are never taken from untrusted input alone.
-    """
-    allowed = {col.get("name") for col in (layer.attribute_schema or []) if col.get("name")}
-    if field_name not in allowed:
-        raise ValueError(f"Unknown attribute field: {field_name}")
-
-    with connection.cursor() as cursor:
-        cursor.execute(
-            f'''
-            SELECT "{field_name}"::text
-            FROM "{layer.schema_name}"."{layer.table_name}"
-            WHERE "{field_name}" IS NOT NULL
-              AND btrim("{field_name}"::text) <> ''
-            LIMIT 1
-            '''
-        )
-        row = cursor.fetchone()
-    if not row or row[0] is None:
-        return None
-    text = str(row[0]).strip()
-    return text or None
 
 
 def distinct_attribute_values(layer: LayerInfo, field_name: str, *, limit: int = 40) -> list[str]:

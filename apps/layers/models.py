@@ -78,7 +78,7 @@ class LayerInfo(models.Model):
     style = models.JSONField(
         default=dict,
         blank=True,
-        help_text="Paint JSON: color, stroke*, opacity, colorBy{field,categories}, marker{type,icon,iconBy}",
+        help_text="Paint JSON: color, stroke*, opacity, colorBy, marker{type,size,icon,iconBy{field,categories:{v:{icon,size}}}}",
     )
     label_config = models.JSONField(default=dict, blank=True, help_text="{field, color, size}")
 

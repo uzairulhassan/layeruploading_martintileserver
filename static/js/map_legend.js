@@ -17,6 +17,15 @@
     return fallback || "#0F2D53";
   }
 
+  /** Accept legacy string categories or `{icon, size}` objects from the style editor. */
+  function iconIdFromCategory(raw, fallback) {
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      raw = raw.icon;
+    }
+    const text = String(raw || "").trim();
+    return text || fallback || "gl-poi";
+  }
+
   function mergedStyle(mapLayer) {
     return {
       ...(mapLayer?.layer_detail?.style || {}),
@@ -39,8 +48,9 @@
       colorField ? colorBy.default : style.color,
       normalizeHex(style.color, "#0F2D53"),
     );
-    const defaultIcon = String(
-      (iconField ? iconBy.default : marker.icon) || marker.icon || "gl-poi",
+    const defaultIcon = iconIdFromCategory(
+      iconField ? iconBy.default : marker.icon,
+      iconIdFromCategory(marker.icon, "gl-poi"),
     );
 
     const makeItem = (key, color, iconId) => ({
@@ -53,7 +63,7 @@
     if (colorField && iconField && colorField === iconField) {
       const keys = [...new Set([...Object.keys(colorCats), ...Object.keys(iconCats)])];
       const items = keys.map((key) =>
-        makeItem(key, colorCats[key], iconCats[key] || defaultIcon),
+        makeItem(key, colorCats[key], iconIdFromCategory(iconCats[key], defaultIcon)),
       );
       if (!items.length) return null;
       return { title: String(title || "").trim(), field: colorField, items };
@@ -72,7 +82,7 @@
         title: String(title || "").trim(),
         field: iconField,
         items: Object.keys(iconCats).map((key) =>
-          makeItem(key, defaultColor, iconCats[key] || defaultIcon),
+          makeItem(key, defaultColor, iconIdFromCategory(iconCats[key], defaultIcon)),
         ),
       });
     }

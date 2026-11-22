@@ -215,6 +215,40 @@ class ShareLinkApiTests(TestCase):
         )
         self.assertEqual(body["source_layer"], TABLE)
 
+    def test_preview_style_uses_draft_paint_not_saved_style(self):
+        self.layer.geometry_type = LayerInfo.GeometryType.LINESTRING
+        self.layer.style = {"color": "#ff0000", "strokeWidth": 2, "opacity": 0.9}
+        self.layer.label_config = {"field": "name", "size": 14, "color": "#111111"}
+        self.layer.save(update_fields=["geometry_type", "style", "label_config"])
+
+        self.api.force_authenticate(self.owner)
+        res = self.api.post(
+            f"/api/layers/{self.layer.id}/preview-style/",
+            {
+                "style": {"color": "#00ff00", "strokeWidth": 4, "opacity": 0.5},
+                "label_config": {},
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        body = res.json()
+        self.assertEqual(
+            body["xyz_url"],
+            f"http://testserver/tiles/geolayers_tile/{{z}}/{{x}}/{{y}}?layer={TABLE}",
+        )
+        self.assertEqual(body["source_id"], f"preview-src-{self.layer.id}")
+        line = next(
+            layer
+            for layer in body["style_layers"]
+            if layer["type"] == "line" and "label" not in layer["id"]
+        )
+        self.assertEqual(line["source-layer"], TABLE)
+        self.assertEqual(line["paint"]["line-color"], "#00ff00")
+        self.assertFalse(any(layer["type"] == "symbol" for layer in body["style_layers"]))
+        self.assertNotIn("glyphs", body)
+        self.assertNotIn("geometry_type", body)
+        self.assertNotIn("source_layer", body)
+
 
 @override_settings(MARTIN_INTERNAL_URL="http://martin.test:3000", MARTIN_LAYER_FUNCTION="geolayers_tile")
 class ShareTileFallbackProxyTests(TestCase):
@@ -485,6 +519,104 @@ class CategoricalStylePaintTests(TestCase):
         sparse_w = build_layer_paint_layers(layer=sparse_line, source_id="s")[0][0]["paint"]["line-width"]
         medium_w = build_layer_paint_layers(layer=medium_line, source_id="s")[0][0]["paint"]["line-width"]
         self.assertGreater(sparse_w[4], medium_w[4])
+
+    def test_marker_size_scales_icons_and_circles(self):
+        from apps.layers.share_style import build_layer_paint_layers
+
+        owner = get_user_model().objects.create_user("msize", "msize@example.com", "pw-12345!")
+        base = {
+            "owner": owner,
+            "schema_name": "layers_data",
+            "geometry_type": LayerInfo.GeometryType.POINT,
+            "feature_count": 80,
+        }
+        icon_default = LayerInfo.objects.create(
+            **base,
+            name="Icon default",
+            table_name="layer_" + "c" * 32,
+            style={"color": "#0F2D53", "marker": {"type": "icon", "icon": "gl-metro"}},
+        )
+        icon_large = LayerInfo.objects.create(
+            **base,
+            name="Icon large",
+            table_name="layer_" + "d" * 32,
+            style={
+                "color": "#0F2D53",
+                "marker": {"type": "icon", "icon": "gl-metro", "size": 2},
+            },
+        )
+        circle_default = LayerInfo.objects.create(
+            **base,
+            name="Circle default",
+            table_name="layer_" + "0" * 32,
+            style={"color": "#0F2D53", "marker": {"type": "circle", "size": 1}},
+        )
+        circle_large = LayerInfo.objects.create(
+            **base,
+            name="Circle large",
+            table_name="layer_" + "e" * 32,
+            style={"color": "#0F2D53", "marker": {"type": "circle", "size": 1.5}},
+        )
+        default_size = build_layer_paint_layers(layer=icon_default, source_id="s")[0][0][
+            "layout"
+        ]["icon-size"]
+        large_size = build_layer_paint_layers(layer=icon_large, source_id="s")[0][0]["layout"][
+            "icon-size"
+        ]
+        circle_base = build_layer_paint_layers(layer=circle_default, source_id="s")[0][0][
+            "paint"
+        ]["circle-radius"]
+        circle_radius = build_layer_paint_layers(layer=circle_large, source_id="s")[0][0][
+            "paint"
+        ]["circle-radius"]
+        self.assertEqual(default_size[0], "interpolate")
+        self.assertEqual(large_size[0], "interpolate")
+        self.assertEqual(circle_radius[0], "interpolate")
+        # Stop values are scaled in place (zoom must stay top-level for Mapbox).
+        self.assertAlmostEqual(large_size[4], default_size[4] * 2, places=4)
+        self.assertAlmostEqual(circle_radius[4], circle_base[4] * 1.5, places=4)
+
+    def test_icon_by_category_sizes_use_match_inside_zoom_stops(self):
+        from apps.layers.share_style import build_layer_paint_layers
+
+        owner = get_user_model().objects.create_user("isz", "isz@example.com", "pw-12345!")
+        layer = LayerInfo.objects.create(
+            owner=owner,
+            name="Sized icons",
+            schema_name="layers_data",
+            table_name="layer_" + "9" * 32,
+            geometry_type=LayerInfo.GeometryType.POINT,
+            feature_count=80,
+            style={
+                "color": "#0F2D53",
+                "marker": {
+                    "type": "icon",
+                    "icon": "gl-poi",
+                    "size": 1,
+                    "iconBy": {
+                        "field": "station_type",
+                        "default": "gl-poi",
+                        "categories": {
+                            "metro": {"icon": "gl-metro", "size": 2},
+                            "bus": {"icon": "gl-bus", "size": 0.5},
+                        },
+                    },
+                },
+            },
+            attribute_schema=[{"name": "station_type", "type": "text"}],
+        )
+        symbol = build_layer_paint_layers(layer=layer, source_id="s")[0][0]
+        icon_size = symbol["layout"]["icon-size"]
+        self.assertEqual(icon_size[0], "interpolate")
+        self.assertEqual(icon_size[2], ["zoom"])
+        first_stop = icon_size[4]
+        self.assertEqual(first_stop[0], "match")
+        self.assertEqual(first_stop[1], ["to-string", ["get", "station_type"]])
+        # metro=2x, bus=0.5x relative to the density stop baseline.
+        metro_idx = first_stop.index("metro")
+        bus_idx = first_stop.index("bus")
+        self.assertAlmostEqual(first_stop[metro_idx + 1] / first_stop[bus_idx + 1], 4.0, places=4)
+        self.assertEqual(symbol["layout"]["icon-image"][0], "match")
 
     def test_share_style_exposes_required_icons(self):
         from apps.layers.share_style import build_share_style

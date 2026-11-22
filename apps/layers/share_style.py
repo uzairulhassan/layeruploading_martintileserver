@@ -20,14 +20,26 @@ Style JSON (backward compatible)::
       },
       "marker": {
         "type": "circle" | "icon",
+        "size": 1.0,
         "icon": "gl-poi",
         "iconBy": {
           "field": "<any attribute from this layer>",
           "default": "gl-poi",
-          "categories": {"value_a": "gl-square", "value_b": "gl-triangle"}
+          "defaultSize": 1.0,
+          "categories": {
+            "value_a": {"icon": "gl-square", "size": 1.0},
+            "value_b": {"icon": "gl-triangle", "size": 1.5}
+          }
         }
       }
     }
+
+Editor writes ``categories`` as ``{icon, size}``. Readers still accept legacy string
+values (``"gl-square"`` → icon + ``marker.size`` / ``defaultSize``).
+
+``marker.size`` scales density zoom curves for circles and for icons when Icon by is
+off (same icon for all). With ``iconBy``, each category uses its own ``size``.
+Lines/polygons use ``strokeWidth``.
 
 Categorical colors become MapLibre ``match`` expressions. Point icons use
 ``symbol`` layers with SDF ``icon-image`` ids registered by GeoLayers clients
@@ -191,8 +203,30 @@ def _normalize_hex(value: object, fallback: str) -> str:
 
 
 def _safe_icon_id(value: object, fallback: str = _DEFAULT_ICON) -> str:
+    if isinstance(value, dict):
+        value = value.get("icon")
     text = str(value or "").strip()
     return text if text in GEOLAYERS_ICON_IDS else fallback
+
+
+def _clamp_marker_size(value: object, fallback: float = 1.0) -> float:
+    try:
+        scale = float(fallback if value is None else value)
+    except (TypeError, ValueError):
+        scale = float(fallback)
+    return max(0.25, min(4.0, scale))
+
+
+def _icon_category_spec(
+    raw: object, *, default_icon: str = _DEFAULT_ICON, default_size: float = 1.0
+) -> tuple[str, float]:
+    """Normalize iconBy category values: legacy string or ``{icon, size}``."""
+    if isinstance(raw, dict):
+        return (
+            _safe_icon_id(raw.get("icon"), default_icon),
+            _clamp_marker_size(raw.get("size"), default_size),
+        )
+    return _safe_icon_id(raw, default_icon), _clamp_marker_size(default_size, 1.0)
 
 
 def _match_expression(field: str, categories: dict, default, *, coerce_icon: bool = False):
@@ -362,6 +396,88 @@ def _marker_config(style: dict) -> dict:
     return _as_dict(style.get("marker"))
 
 
+def _marker_size_scale(style: dict) -> float:
+    """User size multiplier for circles / same-for-all icons (1 = density default)."""
+    return _clamp_marker_size(_marker_config(style).get("size"), 1.0)
+
+
+def _scale_paint_expr(expr: object, scale: float):
+    """Scale a zoom curve or number without nesting ``zoom`` under ``*``.
+
+    Mapbox requires ``["zoom"]`` only as the input of a top-level ``interpolate`` /
+    ``step``. So we multiply stop values in place instead of wrapping the curve.
+    """
+    if abs(scale - 1.0) < 0.001:
+        return expr
+    scale = round(float(scale), 3)
+    if isinstance(expr, (int, float)):
+        return round(float(expr) * scale, 4)
+    if not isinstance(expr, list) or not expr:
+        return expr
+    op = expr[0]
+    if op == "interpolate" and len(expr) >= 5:
+        # ["interpolate", type, input, z1, v1, z2, v2, ...]
+        out = list(expr)
+        for i in range(4, len(out), 2):
+            if isinstance(out[i], (int, float)):
+                out[i] = round(float(out[i]) * scale, 4)
+        return out
+    if op == "step" and len(expr) >= 3:
+        # ["step", input, v0, z1, v1, ...]
+        out = list(expr)
+        if isinstance(out[2], (int, float)):
+            out[2] = round(float(out[2]) * scale, 4)
+        for i in range(4, len(out), 2):
+            if isinstance(out[i], (int, float)):
+                out[i] = round(float(out[i]) * scale, 4)
+        return out
+    return expr
+
+
+def _icon_size_expression(style: dict, base_curve: object):
+    """Point icon-size: global ``marker.size``, or per ``iconBy`` category size.
+
+    Per-value sizes stay Mapbox-valid by putting ``match`` *inside* each zoom stop
+    of the density interpolate (``zoom`` remains the top-level input).
+    """
+    marker = _marker_config(style)
+    icon_by = _as_dict(marker.get("iconBy"))
+    field = (icon_by.get("field") or "").strip()
+    global_size = _marker_size_scale(style)
+    if not field:
+        return _scale_paint_expr(base_curve, global_size)
+
+    default_icon = _safe_icon_id(icon_by.get("default"), _safe_icon_id(marker.get("icon")))
+    default_size = _clamp_marker_size(icon_by.get("defaultSize"), global_size)
+    size_by_key: dict[str, float] = {}
+    for raw_key, raw_val in _as_dict(icon_by.get("categories")).items():
+        key = str(raw_key)
+        if key == "":
+            continue
+        _icon, size = _icon_category_spec(
+            raw_val, default_icon=default_icon, default_size=default_size
+        )
+        size_by_key[key] = size
+
+    if not size_by_key or all(abs(size - default_size) < 0.001 for size in size_by_key.values()):
+        return _scale_paint_expr(base_curve, default_size)
+
+    if not isinstance(base_curve, list) or not base_curve or base_curve[0] != "interpolate":
+        return _scale_paint_expr(base_curve, default_size)
+
+    out = list(base_curve)
+    for i in range(4, len(out), 2):
+        base_val = out[i]
+        if not isinstance(base_val, (int, float)):
+            continue
+        match_expr: list = ["match", ["to-string", ["get", field]]]
+        for key, size in size_by_key.items():
+            match_expr.extend([key, round(float(base_val) * size, 4)])
+        match_expr.append(round(float(base_val) * default_size, 4))
+        out[i] = match_expr
+    return out
+
+
 def _uses_point_icons(style: dict) -> bool:
     """Icons only when the user explicitly chose marker type ``icon``."""
     return str(_marker_config(style).get("type") or "circle").lower() == "icon"
@@ -476,21 +592,22 @@ def build_style_legend(style: dict | None, *, title: str = "") -> dict | None:
             }
         )
     if icon_field and icon_cats:
+        icon_items = []
+        for key in icon_cats.keys():
+            icon_id = _safe_icon_id(icon_cats.get(key), default_icon)
+            icon_items.append(
+                {
+                    "label": str(key),
+                    "color": default_color,
+                    "icon": icon_id,
+                    "iconLabel": _ICON_LABELS.get(icon_id, ""),
+                }
+            )
         sections.append(
             {
                 "title": (title or "").strip(),
                 "field": icon_field,
-                "items": [
-                    {
-                        "label": str(key),
-                        "color": default_color,
-                        "icon": _safe_icon_id(icon_cats.get(key), default_icon),
-                        "iconLabel": _ICON_LABELS.get(
-                            _safe_icon_id(icon_cats.get(key), default_icon), ""
-                        ),
-                    }
-                    for key in icon_cats.keys()
-                ],
+                "items": icon_items,
             }
         )
     if not sections:
@@ -518,6 +635,8 @@ def build_layer_paint_layers(
     opacity: float | None = None,
     visibility: str = "visible",
     id_prefix: str | None = None,
+    replace_style: bool = False,
+    replace_label_config: bool = False,
 ) -> tuple[list[dict], bool, list[str]]:
     """Return ``(style_layers, needs_glyphs, required_icons)``.
 
@@ -525,9 +644,18 @@ def build_layer_paint_layers(
     pass a merged style (e.g. map ``style_override``) or a map-level opacity.
     ``id_prefix`` defaults to the PostGIS table name (share links); the in-app map
     builder passes ``layer-<map_layer_id>``.
+
+    Style modal live preview passes ``replace_style`` / ``replace_label_config`` so
+    the draft form fully replaces saved paint (merge would keep stale colorBy etc.).
     """
-    style = {**(layer.style or {}), **(style or {})}
-    label_config = label_config if label_config is not None else (layer.label_config or {})
+    if replace_style:
+        style = dict(style or {})
+    else:
+        style = {**(layer.style or {}), **(style or {})}
+    if replace_label_config:
+        label_config = dict(label_config or {})
+    else:
+        label_config = label_config if label_config is not None else (layer.label_config or {})
     table = layer.table_name
     prefix = id_prefix or table
     geom = layer.geometry_type or ""
@@ -551,8 +679,9 @@ def build_layer_paint_layers(
     layout = {"visibility": visibility}
     layers: list[dict] = []
     required_icons: list[str] = []
-    icon_size = density["icon_size"]
-    circle_radius = density["circle_radius"]
+    point_size = _marker_size_scale(style)
+    icon_size = _icon_size_expression(style, density["icon_size"])
+    circle_radius = _scale_paint_expr(density["circle_radius"], point_size)
     icon_halo = density["icon_halo"]
     line_density = density["line_scale"]
 

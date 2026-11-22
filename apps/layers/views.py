@@ -24,8 +24,8 @@ from .services import (
     delete_layer_group,
     distinct_attribute_values,
     import_shapefile,
-    sample_attribute_value,
 )
+from .share_style import build_layer_paint_layers
 
 
 def visible_layers(user):
@@ -85,19 +85,6 @@ class LayerViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         delete_layer(instance)
 
-    @action(detail=True, methods=["get"], url_path="sample-attribute")
-    def sample_attribute(self, request, pk=None):
-        """One real attribute value for the style modal live preview."""
-        layer = self.get_object()
-        field = (request.query_params.get("field") or "").strip()
-        if not field:
-            return Response({"detail": "Query parameter 'field' is required."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            value = sample_attribute_value(layer, field)
-        except ValueError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-        return Response({"field": field, "value": value})
-
     @action(detail=True, methods=["get"], url_path="attribute-values")
     def attribute_values(self, request, pk=None):
         """Distinct attribute values for categorical color/icon styling."""
@@ -114,6 +101,38 @@ class LayerViewSet(viewsets.ModelViewSet):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response({"field": field, "values": values, "count": len(values)})
+
+    @action(detail=True, methods=["post"], url_path="preview-style")
+    def preview_style(self, request, pk=None):
+        """Draft MapLibre paint layers for the style modal (not yet saved)."""
+        layer = self.get_object()
+        draft_style = request.data.get("style")
+        draft_labels = request.data.get("label_config")
+        if not isinstance(draft_style, dict):
+            draft_style = {}
+        if not isinstance(draft_labels, dict):
+            draft_labels = {}
+
+        source_id = f"preview-src-{layer.id}"
+        paint_layers, _, required_icons = build_layer_paint_layers(
+            layer=layer,
+            source_id=source_id,
+            style=draft_style,
+            label_config=draft_labels,
+            id_prefix=f"preview-{layer.id}",
+            replace_style=True,
+            replace_label_config=True,
+        )
+        tile_info = LayerInfoSerializer(layer, context=self.get_serializer_context()).data
+        return Response(
+            {
+                "source_id": source_id,
+                "xyz_url": tile_info.get("xyz_url"),
+                "bounds": layer.bounds,
+                "style_layers": paint_layers,
+                "required_icons": required_icons,
+            }
+        )
 
     @action(detail=True, methods=["post"])
     def share(self, request, pk=None):
