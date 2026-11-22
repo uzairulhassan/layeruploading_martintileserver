@@ -2185,6 +2185,48 @@ body:not(.has-app-shell) .page.auth-page {
   color: var(--navy-muted);
 }
 
+.upload-allowed {
+  margin-top: 0.6rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--navy-line);
+  border-radius: var(--radius);
+  background: rgba(var(--ink-rgb), 0.015);
+}
+
+.upload-allowed-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--navy-muted);
+}
+
+.upload-allowed-rows {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.upload-allowed-row {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: baseline;
+}
+
+.upload-allowed-ext {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--navy);
+}
+
+.upload-allowed-desc {
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--navy-muted);
+}
+
 .modal-form,
 .modal-body {
   padding: 1.2rem 1.35rem 1.25rem;
@@ -2653,19 +2695,6 @@ body:not(.has-app-shell) .page.auth-page {
   color: var(--navy);
   line-height: 1.25;
   word-break: break-word;
-}
-
-.external-toast {
-  margin: 0.75rem 0 0;
-  min-height: 1.1rem;
-  font-size: 0.82rem;
-  color: var(--success, #167a4e);
-  opacity: 0;
-  transition: opacity 180ms ease;
-}
-
-.external-toast.is-visible {
-  opacity: 1;
 }
 
 .external-link-actions .btn.is-copied {

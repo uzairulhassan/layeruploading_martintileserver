@@ -28,10 +28,17 @@ function permissionLabel(permission) {
 }
 
 async function loadLayers() {
-  const res = await Auth.apiFetch("/api/layers/?page_size=500");
-  const data = await res.json();
-  CURRENT_LAYERS = data.results || data;
-  renderLayers();
+  try {
+    const res = await Auth.apiFetch("/api/layers/?page_size=500");
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not load layers."));
+    }
+    const data = await res.json();
+    CURRENT_LAYERS = data.results || data;
+    renderLayers();
+  } catch (err) {
+    Toast.error(err.message || "Could not load layers.");
+  }
 }
 
 function groupBadge(layer) {
@@ -119,43 +126,77 @@ function handleRowAction(action, id) {
 }
 
 // ---- Upload ----
-document.getElementById("open-upload-modal").addEventListener("click", () => Auth.openModal("upload-modal"));
+const UPLOAD_EXTENSIONS = [".zip", ".kml", ".kmz"];
+const UPLOAD_TYPE_ERROR = "Use a .zip shapefile package, or a .kml / .kmz file.";
+
+function uploadFileExtension(filename) {
+  const match = /\.([a-z0-9]+)$/i.exec(String(filename || "").trim());
+  return match ? `.${match[1].toLowerCase()}` : "";
+}
+
+function isAllowedUploadFile(file) {
+  return Boolean(file) && UPLOAD_EXTENSIONS.includes(uploadFileExtension(file.name));
+}
+
+document.getElementById("open-upload-modal").addEventListener("click", () => {
+  Auth.openModal("upload-modal");
+});
+
+document.getElementById("upload-file").addEventListener("change", () => {
+  const file = document.getElementById("upload-file").files[0];
+  if (file && !isAllowedUploadFile(file)) {
+    Toast.error(UPLOAD_TYPE_ERROR);
+    document.getElementById("upload-file").value = "";
+  }
+});
 
 document.getElementById("upload-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const errorBox = document.getElementById("upload-error");
-  errorBox.classList.add("hidden");
+
+  const name = document.getElementById("upload-name").value.trim();
+  const description = document.getElementById("upload-description").value.trim();
+  const file = document.getElementById("upload-file").files[0];
+
+  if (!name) {
+    Toast.error("Layer name is required.");
+    return;
+  }
+  if (!file) {
+    Toast.error("Choose a file to upload.");
+    return;
+  }
+  if (!isAllowedUploadFile(file)) {
+    Toast.error(UPLOAD_TYPE_ERROR);
+    return;
+  }
+
   const submitBtn = document.getElementById("upload-submit");
   submitBtn.disabled = true;
   submitBtn.textContent = "Importing…";
 
   const formData = new FormData();
-  formData.append("name", document.getElementById("upload-name").value);
-  formData.append("description", document.getElementById("upload-description").value);
-  formData.append("file", document.getElementById("upload-file").files[0]);
+  formData.append("name", name);
+  formData.append("description", description);
+  formData.append("file", file);
 
   try {
     const res = await Auth.apiFetch("/api/layers/", { method: "POST", body: formData });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(body.detail || JSON.stringify(body));
+      throw new Error(Toast.fromApiBody(body, "Upload failed."));
     }
     document.getElementById("upload-form").reset();
     Auth.closeModal("upload-modal");
     await loadLayers();
-    // KML/KMZ returns { group: {...} }; shapefile returns a single LayerInfo.
     if (body.group) {
       const count = body.group.layer_count ?? (body.group.layers || []).length;
       const fmt = String(body.group.source_format || "KML").toUpperCase();
-      if (typeof Toast !== "undefined" && Toast.success) {
-        Toast.success(`${fmt} imported as ${count} layer${count === 1 ? "" : "s"}.`);
-      }
-    } else if (typeof Toast !== "undefined" && Toast.success) {
+      Toast.success(`${fmt} imported as ${count} layer${count === 1 ? "" : "s"}.`);
+    } else {
       Toast.success("Shapefile imported.");
     }
   } catch (err) {
-    errorBox.textContent = err.message;
-    errorBox.classList.remove("hidden");
+    Toast.error(err.message || "Upload failed.");
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = "Upload";
@@ -173,23 +214,58 @@ function openRenameModal(layer) {
 document.getElementById("rename-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const id = document.getElementById("rename-id").value;
+  const name = document.getElementById("rename-name").value.trim();
+  if (!name) {
+    Toast.error("Layer name is required.");
+    return;
+  }
   const payload = {
-    name: document.getElementById("rename-name").value,
-    description: document.getElementById("rename-description").value,
+    name,
+    description: document.getElementById("rename-description").value.trim(),
   };
-  const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "PATCH", body: payload });
-  if (res.ok) {
+  try {
+    const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "PATCH", body: payload });
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not update layer."));
+    }
     Auth.closeModal("rename-modal");
     await loadLayers();
+    Toast.success("Layer updated.");
+  } catch (err) {
+    Toast.error(err.message || "Could not update layer.");
   }
 });
 
 // ---- Delete ----
-async function deleteLayer(layer) {
-  if (!confirm(`Delete layer "${layer.name}"? This also drops its data table and cannot be undone.`)) return;
-  const res = await Auth.apiFetch(`/api/layers/${layer.id}/`, { method: "DELETE" });
-  if (res.ok || res.status === 204) await loadLayers();
+function openDeleteLayerModal(layer) {
+  document.getElementById("delete-layer-id").value = layer.id;
+  document.getElementById("delete-layer-name").textContent = layer.name;
+  Auth.openModal("delete-layer-modal");
 }
+
+async function deleteLayer(layer) {
+  openDeleteLayerModal(layer);
+}
+
+document.getElementById("delete-layer-confirm").addEventListener("click", async () => {
+  const id = document.getElementById("delete-layer-id").value;
+  if (!id) return;
+  const btn = document.getElementById("delete-layer-confirm");
+  btn.disabled = true;
+  try {
+    const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "DELETE" });
+    if (!res.ok && res.status !== 204) {
+      throw new Error(await Toast.fromResponse(res, "Could not delete layer."));
+    }
+    Auth.closeModal("delete-layer-modal");
+    await loadLayers();
+    Toast.success("Layer deleted.");
+  } catch (err) {
+    Toast.error(err.message || "Could not delete layer.");
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ---- Style & labels ----
 function normalizeHexColor(value, fallback) {
@@ -692,11 +768,17 @@ document.getElementById("style-form").addEventListener("submit", async (event) =
       size: values.labelSize,
     },
   };
-  const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "PATCH", body: payload });
-  if (res.ok) {
+  try {
+    const res = await Auth.apiFetch(`/api/layers/${id}/`, { method: "PATCH", body: payload });
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not save style."));
+    }
     STYLE_ACTIVE_LAYER = null;
     Auth.closeModal("style-modal");
     await loadLayers();
+    Toast.success("Style saved.");
+  } catch (err) {
+    Toast.error(err.message || "Could not save style.");
   }
 });
 
@@ -726,6 +808,12 @@ document.getElementById("style-icon-by-field")?.addEventListener("change", () =>
 
 // ---- Share (people + Layer URL) ----
 let SHARE_COPY_RESET = null;
+
+function openRevokeLinkModal(layerId, linkId) {
+  document.getElementById("revoke-link-layer-id").value = layerId;
+  document.getElementById("revoke-link-id").value = linkId;
+  Auth.openModal("revoke-link-modal");
+}
 
 function setShareTab(tab) {
   const peopleTab = document.getElementById("share-tab-people");
@@ -780,7 +868,6 @@ function resetExternalCreateForm() {
     expiryInput.min = tomorrow;
     expiryInput.value = "";
   }
-  document.getElementById("external-create-error")?.classList.add("hidden");
   syncExternalExpiryControls();
 }
 
@@ -797,8 +884,6 @@ function openShareModal(layer) {
   document.getElementById("external-owner-only").classList.toggle("hidden", !isOwner);
   document.getElementById("external-viewer-note").classList.toggle("hidden", isOwner);
 
-  document.getElementById("external-copy-status").textContent = "";
-  document.getElementById("external-copy-status").classList.remove("is-visible");
   resetExternalCreateForm();
 
   if (isOwner) {
@@ -893,11 +978,7 @@ function renderShareLinks(layerId, links) {
     btn.addEventListener("click", () => copyToClipboardWithFeedback(btn.dataset.copyLink, btn, "Layer URL copied."));
   });
   list.querySelectorAll("[data-revoke-link]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      if (!confirm("Revoke this link? Anyone using it will lose access right away.")) return;
-      await Auth.apiFetch(`/api/layers/${layerId}/share-links/${btn.dataset.revokeLink}/`, { method: "DELETE" });
-      await loadShareLinks(layerId);
-    });
+    btn.addEventListener("click", () => openRevokeLinkModal(layerId, btn.dataset.revokeLink));
   });
 }
 
@@ -908,8 +989,6 @@ document.querySelectorAll('input[name="external-link-type"]').forEach((input) =>
 document.getElementById("external-create-btn").addEventListener("click", async () => {
   const layer = findLayer(document.getElementById("share-layer-id").value);
   if (!layer) return;
-  const errorBox = document.getElementById("external-create-error");
-  errorBox.classList.add("hidden");
 
   const isPermanent = getExternalLinkType() === "permanent";
   const expiryValue = document.getElementById("external-expiry").value;
@@ -917,8 +996,7 @@ document.getElementById("external-create-btn").addEventListener("click", async (
 
   if (!isPermanent) {
     if (!expiryValue) {
-      errorBox.textContent = "Choose an expiry date.";
-      errorBox.classList.remove("hidden");
+      Toast.error("Choose an expiry date.");
       return;
     }
     body = { expires_at: new Date(`${expiryValue}T23:59:59`).toISOString() };
@@ -932,14 +1010,34 @@ document.getElementById("external-create-btn").addEventListener("click", async (
       body,
     });
     if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
-      throw new Error(errBody.expires_at?.[0] || errBody.detail || "Could not generate the link.");
+      throw new Error(await Toast.fromResponse(res, "Could not generate the link."));
     }
     resetExternalCreateForm();
     await loadShareLinks(layer.id);
+    Toast.success("Share link created.");
   } catch (err) {
-    errorBox.textContent = err.message;
-    errorBox.classList.remove("hidden");
+    Toast.error(err.message || "Could not generate the link.");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("revoke-link-confirm").addEventListener("click", async () => {
+  const layerId = document.getElementById("revoke-link-layer-id").value;
+  const linkId = document.getElementById("revoke-link-id").value;
+  if (!layerId || !linkId) return;
+  const btn = document.getElementById("revoke-link-confirm");
+  btn.disabled = true;
+  try {
+    const res = await Auth.apiFetch(`/api/layers/${layerId}/share-links/${linkId}/`, { method: "DELETE" });
+    if (!res.ok && res.status !== 204) {
+      throw new Error(await Toast.fromResponse(res, "Could not revoke link."));
+    }
+    Auth.closeModal("revoke-link-modal");
+    await loadShareLinks(layerId);
+    Toast.success("Link revoked.");
+  } catch (err) {
+    Toast.error(err.message || "Could not revoke link.");
   } finally {
     btn.disabled = false;
   }
@@ -965,12 +1063,20 @@ function renderShareList(layer) {
   list.querySelectorAll("[data-remove-share]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const layerId = document.getElementById("share-layer-id").value;
-      await Auth.apiFetch(`/api/layers/${layerId}/unshare/`, {
-        method: "POST",
-        body: { user_id: btn.dataset.removeShare },
-      });
-      await loadLayers();
-      renderShareList(findLayer(layerId));
+      try {
+        const res = await Auth.apiFetch(`/api/layers/${layerId}/unshare/`, {
+          method: "POST",
+          body: { user_id: btn.dataset.removeShare },
+        });
+        if (!res.ok) {
+          throw new Error(await Toast.fromResponse(res, "Could not remove access."));
+        }
+        await loadLayers();
+        renderShareList(findLayer(layerId));
+        Toast.success("Access removed.");
+      } catch (err) {
+        Toast.error(err.message || "Could not remove access.");
+      }
     });
   });
 }
@@ -1009,15 +1115,25 @@ document.getElementById("share-submit").addEventListener("click", async () => {
   if (!SELECTED_SHARE_USER) return;
   const layerId = document.getElementById("share-layer-id").value;
   const permission = document.getElementById("share-permission").value;
-  await Auth.apiFetch(`/api/layers/${layerId}/share/`, {
-    method: "POST",
-    body: { shared_with: SELECTED_SHARE_USER.id, permission },
-  });
-  await loadLayers();
-  renderShareList(findLayer(layerId));
-  document.getElementById("share-submit").disabled = true;
-  SELECTED_SHARE_USER = null;
-  document.getElementById("share-search").value = "";
+  const btn = document.getElementById("share-submit");
+  btn.disabled = true;
+  try {
+    const res = await Auth.apiFetch(`/api/layers/${layerId}/share/`, {
+      method: "POST",
+      body: { shared_with: SELECTED_SHARE_USER.id, permission },
+    });
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not share layer."));
+    }
+    await loadLayers();
+    renderShareList(findLayer(layerId));
+    SELECTED_SHARE_USER = null;
+    document.getElementById("share-search").value = "";
+    Toast.success("Layer shared.");
+  } catch (err) {
+    Toast.error(err.message || "Could not share layer.");
+    btn.disabled = false;
+  }
 });
 
 document.querySelectorAll("[data-share-tab]").forEach((btn) => {
@@ -1025,22 +1141,18 @@ document.querySelectorAll("[data-share-tab]").forEach((btn) => {
 });
 
 async function copyToClipboardWithFeedback(text, button, successText) {
-  const status = document.getElementById("external-copy-status");
   clearTimeout(SHARE_COPY_RESET);
 
   try {
     await copyTextToClipboard(text);
     document.querySelectorAll("#external-links-list .is-copied").forEach((btn) => btn.classList.remove("is-copied"));
     button.classList.add("is-copied");
-    status.textContent = successText;
-    status.classList.add("is-visible");
     SHARE_COPY_RESET = window.setTimeout(() => {
       button.classList.remove("is-copied");
-      status.classList.remove("is-visible");
     }, 1800);
+    Toast.success(successText || "Copied.");
   } catch {
-    status.textContent = "Copy failed — select the text and copy manually.";
-    status.classList.add("is-visible");
+    Toast.error("Copy failed — select the text and copy manually.");
   }
 }
 

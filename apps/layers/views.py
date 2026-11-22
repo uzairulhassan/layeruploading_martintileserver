@@ -65,7 +65,7 @@ class LayerViewSet(viewsets.ModelViewSet):
         upload_kwargs = {
             "owner": request.user,
             "name": data["name"],
-            "description": data.get("description", ""),
+            "description": data["description"],
             "uploaded_file": data["file"],
         }
         context = self.get_serializer_context()

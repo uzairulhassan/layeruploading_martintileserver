@@ -392,13 +392,13 @@ async function addLayerToMap(layerId) {
     body: { layer: layerId },
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    alert(body.detail || "Could not add layer to map.");
+    Toast.error(await Toast.fromResponse(res, "Could not add layer to map."));
     return;
   }
   await refreshAfterLayerChange();
   fitMapToLayers({ preferLayerId: layerId });
   window.setTimeout(() => fitMapToLayers({ preferLayerId: layerId, animate: true }), 400);
+  Toast.success("Layer added to map.");
 }
 
 async function addGroupToMap(groupId) {
@@ -407,23 +407,38 @@ async function addGroupToMap(groupId) {
     body: { group: groupId },
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    alert(body.detail || "Could not add KML/KMZ group to map.");
+    Toast.error(await Toast.fromResponse(res, "Could not add KML/KMZ group to map."));
     return;
   }
   await refreshAfterLayerChange();
   fitMapToLayers();
   window.setTimeout(() => fitMapToLayers({ animate: true }), 400);
+  Toast.success("Group added to map.");
 }
 
 async function removeMapLayer(mapLayerId) {
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "DELETE" });
-  await refreshAfterLayerChange();
+  try {
+    const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "DELETE" });
+    if (!res.ok && res.status !== 204) {
+      throw new Error(await Toast.fromResponse(res, "Could not remove layer from map."));
+    }
+    await refreshAfterLayerChange();
+    Toast.success("Layer removed from map.");
+  } catch (err) {
+    Toast.error(err.message || "Could not remove layer from map.");
+  }
 }
 
 async function updateMapLayer(mapLayerId, payload) {
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "PATCH", body: payload });
-  await refreshAfterLayerChange();
+  try {
+    const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/layers/${mapLayerId}/`, { method: "PATCH", body: payload });
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not update layer."));
+    }
+    await refreshAfterLayerChange();
+  } catch (err) {
+    Toast.error(err.message || "Could not update layer.");
+  }
 }
 
 async function moveLayer(mapLayerId, direction) {
@@ -433,11 +448,18 @@ async function moveLayer(mapLayerId, direction) {
   if (swapWith < 0 || swapWith >= sorted.length) return;
   [sorted[idx], sorted[swapWith]] = [sorted[swapWith], sorted[idx]];
 
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/reorder/`, {
-    method: "POST",
-    body: { order: sorted.map((ml) => ml.id) },
-  });
-  await refreshAfterLayerChange();
+  try {
+    const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/reorder/`, {
+      method: "POST",
+      body: { order: sorted.map((ml) => ml.id) },
+    });
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not reorder layers."));
+    }
+    await refreshAfterLayerChange();
+  } catch (err) {
+    Toast.error(err.message || "Could not reorder layers.");
+  }
 }
 
 async function applyRecommendedStackOrder() {
@@ -447,11 +469,11 @@ async function applyRecommendedStackOrder() {
     body: {},
   });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    alert(body.detail || "Could not apply recommended stack order.");
+    Toast.error(await Toast.fromResponse(res, "Could not apply recommended stack order."));
     return;
   }
   await refreshAfterLayerChange();
+  Toast.success("Stack order updated.");
 }
 
 async function refreshAfterLayerChange() {
@@ -758,21 +780,29 @@ function addMapboxLayer(mapLayer) {
 }
 
 async function saveMapMeta() {
-  const center = GL_MAP.getCenter();
-  await Auth.apiFetch(`/api/maps/${MAP_ID}/`, {
-    method: "PATCH",
-    body: {
-      name: document.getElementById("map-name-input").value,
-      basemap_style: document.getElementById("basemap-select").value,
-      center_lng: center.lng,
-      center_lat: center.lat,
-      zoom: GL_MAP.getZoom(),
-    },
-  });
   const btn = document.getElementById("save-map-btn");
-  const original = btn.textContent;
-  btn.textContent = "Saved!";
-  setTimeout(() => { btn.textContent = original; }, 1200);
+  if (btn) btn.disabled = true;
+  try {
+    const center = GL_MAP.getCenter();
+    const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/`, {
+      method: "PATCH",
+      body: {
+        name: document.getElementById("map-name-input").value,
+        basemap_style: document.getElementById("basemap-select").value,
+        center_lng: center.lng,
+        center_lat: center.lat,
+        zoom: GL_MAP.getZoom(),
+      },
+    });
+    if (!res.ok) {
+      throw new Error(await Toast.fromResponse(res, "Could not save map."));
+    }
+    Toast.success("Map saved.");
+  } catch (err) {
+    Toast.error(err.message || "Could not save map.");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 /* -- Share modal -- */
@@ -809,8 +839,6 @@ function openShareModal() {
   setHidden(document.getElementById("share-people-viewer"), owner);
   setHidden(document.getElementById("external-owner-only"), !owner);
   setHidden(document.getElementById("map-external-viewer-note"), owner);
-  document.getElementById("map-external-copy-status").textContent = "";
-  document.getElementById("map-external-copy-status").classList.remove("is-visible");
   resetMapExternalCreateForm();
 
   setShareTab("people");
@@ -838,12 +866,20 @@ function renderShareList() {
   `).join("");
   list.querySelectorAll("[data-remove-share]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      await Auth.apiFetch(`/api/maps/${MAP_ID}/unshare/`, {
-        method: "POST",
-        body: { user_id: btn.dataset.removeShare },
-      });
-      await refreshAfterLayerChange();
-      renderShareList();
+      try {
+        const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/unshare/`, {
+          method: "POST",
+          body: { user_id: btn.dataset.removeShare },
+        });
+        if (!res.ok) {
+          throw new Error(await Toast.fromResponse(res, "Could not remove access."));
+        }
+        await refreshAfterLayerChange();
+        renderShareList();
+        Toast.success("Access removed.");
+      } catch (err) {
+        Toast.error(err.message || "Could not remove access.");
+      }
     });
   });
 }
@@ -868,7 +904,6 @@ function resetMapExternalCreateForm() {
     tomorrow.setDate(tomorrow.getDate() + 7);
     expiryInput.value = tomorrow.toISOString().slice(0, 10);
   }
-  setHidden(document.getElementById("map-external-create-error"), true);
   syncMapExternalExpiryControls();
 }
 
@@ -956,34 +991,35 @@ function renderMapShareLinks(links) {
     btn.addEventListener("click", () => copyMapShareUrl(btn.dataset.copyMapUrl, btn, "Map URL copied."));
   });
   list.querySelectorAll("[data-revoke-map-link]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      if (!confirm("Revoke this link? Anyone using it will lose access right away.")) return;
-      await Auth.apiFetch(`/api/maps/${MAP_ID}/share-links/${btn.dataset.revokeMapLink}/`, { method: "DELETE" });
-      await loadMapShareLinks();
-    });
+    btn.addEventListener("click", () => openRevokeLinkModal(btn.dataset.revokeMapLink));
   });
+}
+
+function openRevokeLinkModal(linkId) {
+  document.getElementById("revoke-link-id").value = linkId;
+  Auth.openModal("revoke-link-modal");
 }
 
 async function copyMapShareUrl(text, btn, message) {
   try {
-    await navigator.clipboard.writeText(text);
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const input = document.createElement("input");
+      input.value = text;
+      document.body.appendChild(input);
+      input.select();
+      const ok = document.execCommand("copy");
+      input.remove();
+      if (!ok) throw new Error("copy failed");
+    }
+    document.querySelectorAll("#map-external-links-list .is-copied").forEach((el) => el.classList.remove("is-copied"));
+    btn?.classList.add("is-copied");
+    window.setTimeout(() => btn?.classList.remove("is-copied"), 1800);
+    Toast.success(message || "Copied.");
   } catch {
-    const input = document.createElement("input");
-    input.value = text;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand("copy");
-    input.remove();
+    Toast.error("Copy failed — select the text and copy manually.");
   }
-  const status = document.getElementById("map-external-copy-status");
-  status.textContent = message;
-  status.classList.add("is-visible");
-  document.querySelectorAll("#map-external-links-list .is-copied").forEach((el) => el.classList.remove("is-copied"));
-  btn?.classList.add("is-copied");
-  window.setTimeout(() => {
-    status.classList.remove("is-visible");
-    btn?.classList.remove("is-copied");
-  }, 1800);
 }
 
 function bindShareModal() {
@@ -997,8 +1033,6 @@ function bindShareModal() {
 
   document.getElementById("map-external-create-btn")?.addEventListener("click", async () => {
     if (!isMapOwner()) return;
-    const errorBox = document.getElementById("map-external-create-error");
-    setHidden(errorBox, true);
 
     const isPermanent = getMapExternalLinkType() === "permanent";
     const expiryValue = document.getElementById("map-external-expiry").value;
@@ -1006,8 +1040,7 @@ function bindShareModal() {
 
     if (!isPermanent) {
       if (!expiryValue) {
-        errorBox.textContent = "Choose an expiry date.";
-        setHidden(errorBox, false);
+        Toast.error("Choose an expiry date.");
         return;
       }
       body = { expires_at: new Date(`${expiryValue}T23:59:59`).toISOString() };
@@ -1021,14 +1054,33 @@ function bindShareModal() {
         body,
       });
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.expires_at?.[0] || errBody.detail || "Could not generate the link.");
+        throw new Error(await Toast.fromResponse(res, "Could not generate the link."));
       }
       resetMapExternalCreateForm();
       await loadMapShareLinks();
+      Toast.success("Share link created.");
     } catch (err) {
-      errorBox.textContent = err.message;
-      setHidden(errorBox, false);
+      Toast.error(err.message || "Could not generate the link.");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("revoke-link-confirm")?.addEventListener("click", async () => {
+    const linkId = document.getElementById("revoke-link-id").value;
+    if (!linkId) return;
+    const btn = document.getElementById("revoke-link-confirm");
+    btn.disabled = true;
+    try {
+      const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/share-links/${linkId}/`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) {
+        throw new Error(await Toast.fromResponse(res, "Could not revoke link."));
+      }
+      Auth.closeModal("revoke-link-modal");
+      await loadMapShareLinks();
+      Toast.success("Link revoked.");
+    } catch (err) {
+      Toast.error(err.message || "Could not revoke link.");
     } finally {
       btn.disabled = false;
     }
@@ -1062,18 +1114,28 @@ function bindShareModal() {
 
   document.getElementById("share-submit")?.addEventListener("click", async () => {
     if (!SELECTED_SHARE_USER || !isMapOwner()) return;
-    await Auth.apiFetch(`/api/maps/${MAP_ID}/share/`, {
-      method: "POST",
-      body: {
-        shared_with: SELECTED_SHARE_USER.id,
-        permission: document.getElementById("share-permission").value,
-      },
-    });
-    await refreshAfterLayerChange();
-    renderShareList();
-    document.getElementById("share-submit").disabled = true;
-    SELECTED_SHARE_USER = null;
-    document.getElementById("share-search").value = "";
+    const btn = document.getElementById("share-submit");
+    btn.disabled = true;
+    try {
+      const res = await Auth.apiFetch(`/api/maps/${MAP_ID}/share/`, {
+        method: "POST",
+        body: {
+          shared_with: SELECTED_SHARE_USER.id,
+          permission: document.getElementById("share-permission").value,
+        },
+      });
+      if (!res.ok) {
+        throw new Error(await Toast.fromResponse(res, "Could not share map."));
+      }
+      await refreshAfterLayerChange();
+      renderShareList();
+      SELECTED_SHARE_USER = null;
+      document.getElementById("share-search").value = "";
+      Toast.success("Map shared.");
+    } catch (err) {
+      Toast.error(err.message || "Could not share map.");
+      btn.disabled = false;
+    }
   });
 }
 

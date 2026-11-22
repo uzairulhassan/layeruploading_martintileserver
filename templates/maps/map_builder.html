@@ -200,7 +200,6 @@
             </div>
 
             <button type="button" class="btn btn-primary" id="map-external-create-btn">Generate link</button>
-            <div id="map-external-create-error" class="error-text hidden" role="alert"></div>
           </div>
 
           <div class="share-list-block">
@@ -211,13 +210,31 @@
         <div id="map-external-viewer-note" class="share-viewer-note hidden">
           <p>Only the map owner can create or manage a Map URL.</p>
         </div>
-
-        <p id="map-external-copy-status" class="external-toast" role="status" aria-live="polite"></p>
       </div>
     </div>
 
     <div class="modal-footer modal-footer-share">
       <button type="button" class="btn" data-close-modal="share-modal">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="revoke-link-modal" class="modal-backdrop hidden">
+  <div class="modal modal-confirm" role="dialog" aria-labelledby="revoke-link-modal-title" aria-describedby="revoke-link-modal-desc">
+    <div class="modal-header is-danger">
+      <h2 id="revoke-link-modal-title">Revoke share link</h2>
+      <p class="modal-sub" id="revoke-link-modal-desc">Anyone using this Map URL will lose access right away.</p>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="revoke-link-id">
+      <div class="confirm-callout">
+        <p class="confirm-label">You are about to revoke this link</p>
+        <p class="confirm-note">This action cannot be undone.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close-modal="revoke-link-modal">Cancel</button>
+        <button type="button" class="btn btn-danger-solid" id="revoke-link-confirm">Revoke link</button>
+      </div>
     </div>
   </div>
 </div>

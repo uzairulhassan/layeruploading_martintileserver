@@ -207,8 +207,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       "1 map you created.", "%n maps you created.");
     setTile("shared-maps-num", "shared-maps-copy", sharedMaps,
       "1 map shared with you.", "%n maps shared with you.");
-  } catch (err) {
-    console.error(err);
+  } catch {
     ["owned-layers-copy", "shared-layers-copy", "owned-maps-copy", "shared-maps-copy"].forEach((id) => {
       document.getElementById(id).textContent = "Could not load summary.";
     });

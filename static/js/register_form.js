@@ -62,7 +62,7 @@
         password,
         password_confirm: passwordConfirm,
       });
-      Toast.flash("Account created. Please sign in.", "success");
+      Toast.flash("Account created. Please sign in.");
       window.location.href = "/login/";
     } catch (err) {
       Toast.error(err.message || failMessage);

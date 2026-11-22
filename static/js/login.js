@@ -27,7 +27,7 @@
 
     try {
       await Auth.login(username, password);
-      Toast.flash("Signed in successfully.", "success");
+      Toast.flash("Signed in successfully.");
       window.location.href = destination;
     } catch (err) {
       Toast.error(err.message || "Sign in failed.");

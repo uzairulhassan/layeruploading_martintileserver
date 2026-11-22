@@ -7,8 +7,7 @@ from apps.accounts.serializers import UserSummarySerializer
 
 from .models import LayerGroup, LayerInfo, LayerShare, LayerShareLink
 from .share_policy import validate_share_expires_at
-
-UPLOAD_EXTENSIONS = (".zip", ".kml", ".kmz")
+from .upload_validation import validate_layer_upload_file
 
 
 class LayerGroupSummarySerializer(serializers.ModelSerializer):
@@ -207,12 +206,14 @@ class LayerUploadSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, allow_blank=True, default="")
     file = serializers.FileField()
 
+    def validate_name(self, value):
+        name = (value or "").strip()
+        if not name:
+            raise serializers.ValidationError("Layer name is required.")
+        return name
+
+    def validate_description(self, value):
+        return (value or "").strip()
+
     def validate_file(self, value):
-        if not value.name.lower().endswith(UPLOAD_EXTENSIONS):
-            raise serializers.ValidationError(
-                "Upload a .zip shapefile archive (.shp/.shx/.dbf/.prj) or a .kml / .kmz file."
-            )
-        if value.size > settings.MAX_SHAPEFILE_UPLOAD_SIZE:
-            max_mb = settings.MAX_SHAPEFILE_UPLOAD_SIZE // (1024 * 1024)
-            raise serializers.ValidationError(f"File exceeds the {max_mb}MB upload limit.")
-        return value
+        return validate_layer_upload_file(value)

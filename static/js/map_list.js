@@ -304,7 +304,7 @@ document.getElementById("create-map-form").addEventListener("submit", async (eve
       throw new Error(await Toast.fromResponse(res, "Could not create map."));
     }
     const data = await res.json();
-    Toast.flash("Map created.", "success");
+    Toast.flash("Map created.");
     window.location.href = `/maps/${data.id}/`;
   } catch (err) {
     Toast.error(err.message || "Could not create map.");

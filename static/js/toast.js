@@ -1,5 +1,6 @@
 /**
- * Global toast notifications — theme-aware success / error / info messages.
+ * Centralized toast notifications (success / error / info).
+ * Loaded after auth.js from base.html; host lives in #toast-host.
  */
 const Toast = (() => {
   const HOST_ID = "toast-host";
@@ -81,6 +82,10 @@ const Toast = (() => {
     return show(message, "error", duration);
   }
 
+  function info(message, duration) {
+    return show(message, "info", duration);
+  }
+
   /** Persist a toast across a full-page redirect (sessionStorage). */
   function flash(message, type = "success") {
     const text = String(message || "").trim();
@@ -109,6 +114,7 @@ const Toast = (() => {
     }
   }
 
+  /** Human-readable message from a parsed API JSON body. */
   function fromApiBody(body, fallback = "Request failed.") {
     if (typeof Auth !== "undefined" && Auth.formatApiErrors) {
       return Auth.formatApiErrors(body, fallback);
@@ -117,6 +123,7 @@ const Toast = (() => {
     return fallback;
   }
 
+  /** Human-readable message from a failed fetch Response. */
   async function fromResponse(response, fallback = "Request failed.") {
     const body = await response.json().catch(() => ({}));
     return fromApiBody(body, fallback);
@@ -128,5 +135,5 @@ const Toast = (() => {
     consumeFlash();
   }
 
-  return { show, success, error, flash, fromApiBody, fromResponse };
+  return { success, error, info, flash, fromApiBody, fromResponse };
 })();
