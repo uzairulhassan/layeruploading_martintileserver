@@ -174,7 +174,7 @@ def _point_opacity_paint(layer_opacity: object, density: dict):
     mid = round((far + near) / 2, 3)
     return _zoom_interpolate(8, round(far, 3), 11, mid, 14, round(near, 3))
 
-# Built-in SDF icon ids registered by GeoLayers viewers.
+# Built-in SDF icon ids — keep aligned with static/js/geolayers_icons.js ICON_OPTIONS.
 GEOLAYERS_ICON_IDS = (
     "gl-poi",
     "gl-station",
@@ -514,29 +514,52 @@ def _collect_required_icons(style: dict) -> list[str]:
     return sorted(icons)
 
 
-_ICON_LABELS = {
-    "gl-poi": "Pin",
-    "gl-station": "Station",
-    "gl-underground": "Underground",
-    "gl-elevated": "Elevated",
-    "gl-bus": "Bus",
-    "gl-metro": "Metro",
-    "gl-square": "Square",
-    "gl-triangle": "Triangle",
-    "gl-diamond": "Diamond",
-}
+def _legend_swatch(geometry_type: str = "", *, marker_icons: bool = False) -> str:
+    """How the viewer should draw each legend row (matches map paint)."""
+    if marker_icons:
+        return "icon"
+    geom = (geometry_type or "").lower()
+    if "line" in geom:
+        return "line"
+    if "polygon" in geom:
+        return "fill"
+    return "circle"
 
 
-def build_style_legend(style: dict | None, *, title: str = "") -> dict | None:
+def _legend_item(
+    *,
+    label: str,
+    color: str,
+    swatch: str,
+    icon: str | None = None,
+) -> dict:
+    item = {
+        "label": str(label),
+        "color": color,
+        "swatch": swatch,
+    }
+    if icon:
+        item["icon"] = icon
+    return item
+
+
+def build_style_legend(
+    style: dict | None,
+    *,
+    title: str = "",
+    geometry_type: str = "",
+) -> dict | None:
     """Build an end-user legend from categorical ``colorBy`` / ``iconBy`` style.
 
-    Returns ``None`` when the layer has no attribute categories (single paint only).
-    Generic for any uploaded layer — field names and values come from the style JSON.
+    Returns ``None`` when there are no attribute categories. Icon markers use glyph
+    swatches (never circles). Split ``colorBy`` / ``iconBy`` fields → icon-shape
+    rows only (colors stay on the color-coded layer or the same-field section).
     """
     style = style if isinstance(style, dict) else {}
     color_by = _as_dict(style.get("colorBy"))
     marker = _marker_config(style)
-    icon_by = _as_dict(marker.get("iconBy")) if _uses_point_icons(style) else {}
+    uses_icons = _uses_point_icons(style)
+    icon_by = _as_dict(marker.get("iconBy")) if uses_icons else {}
 
     color_field = (color_by.get("field") or "").strip()
     icon_field = (icon_by.get("field") or "").strip()
@@ -554,78 +577,72 @@ def build_style_legend(style: dict | None, *, title: str = "") -> dict | None:
         _safe_icon_id(marker.get("icon"), _DEFAULT_ICON),
     )
 
-    # Prefer one section field when both target the same attribute.
     if color_field and icon_field and color_field == icon_field:
         keys = list(dict.fromkeys([*color_cats.keys(), *icon_cats.keys()]))
-        items = []
-        for key in keys:
-            icon_id = _safe_icon_id(icon_cats.get(key), default_icon)
-            items.append(
-                {
-                    "label": str(key),
-                    "color": _normalize_hex(color_cats.get(key), default_color),
-                    "icon": icon_id,
-                    "iconLabel": _ICON_LABELS.get(icon_id, ""),
-                }
+        items = [
+            _legend_item(
+                label=key,
+                color=_normalize_hex(color_cats.get(key), default_color),
+                swatch="icon",
+                icon=_safe_icon_id(icon_cats.get(key), default_icon),
             )
+            for key in keys
+        ]
         if not items:
             return None
         return {
             "title": (title or "").strip(),
             "field": color_field,
+            "caption": f"By {color_field}",
             "items": items,
         }
 
-    sections: list[dict] = []
-    if color_field and color_cats:
-        sections.append(
+    groups: list[dict] = []
+    # Split fields: color rows only when there is no iconBy; icon rows = glyph only.
+    if color_field and color_cats and not icon_field:
+        color_swatch = _legend_swatch(geometry_type, marker_icons=uses_icons)
+        groups.append(
             {
-                "title": (title or "").strip(),
                 "field": color_field,
+                "caption": f"Colored by {color_field}",
                 "items": [
-                    {
-                        "label": str(key),
-                        "color": _normalize_hex(color_cats.get(key), default_color),
-                        "icon": None,
-                        "iconLabel": "",
-                    }
+                    _legend_item(
+                        label=key,
+                        color=_normalize_hex(color_cats.get(key), default_color),
+                        swatch=color_swatch,
+                        icon=default_icon if uses_icons else None,
+                    )
                     for key in color_cats.keys()
                 ],
             }
         )
     if icon_field and icon_cats:
-        icon_items = []
-        for key in icon_cats.keys():
-            icon_id = _safe_icon_id(icon_cats.get(key), default_icon)
-            icon_items.append(
-                {
-                    "label": str(key),
-                    "color": default_color,
-                    "icon": icon_id,
-                    "iconLabel": _ICON_LABELS.get(icon_id, ""),
-                }
-            )
-        sections.append(
+        groups.append(
             {
-                "title": (title or "").strip(),
                 "field": icon_field,
-                "items": icon_items,
+                "caption": f"Icons by {icon_field}",
+                "items": [
+                    _legend_item(
+                        label=key,
+                        color=default_color,
+                        swatch="icon",
+                        icon=_safe_icon_id(icon_cats.get(key), default_icon),
+                    )
+                    for key in icon_cats.keys()
+                ],
             }
         )
-    if not sections:
+    if not groups:
         return None
-    if len(sections) == 1:
-        section = sections[0]
+    if len(groups) == 1:
+        group = groups[0]
         return {
-            "title": section["title"],
-            "field": section["field"],
-            "items": section["items"],
+            "title": (title or "").strip(),
+            "field": group["field"],
+            "caption": group["caption"],
+            "items": group["items"],
         }
-    return {
-        "title": (title or "").strip(),
-        "field": "",
-        "sections": sections,
-    }
+    return {"title": (title or "").strip(), "sections": groups}
 
 
 def build_layer_paint_layers(
@@ -929,7 +946,9 @@ def build_share_style(*, layer: LayerInfo, tiles_url: str) -> dict:
     table = layer.table_name
     geom = layer.geometry_type or ""
 
-    legend = build_style_legend(style, title=layer.name)
+    legend = build_style_legend(
+        style, title=layer.name, geometry_type=layer.geometry_type or ""
+    )
     metadata = {
         "geolayers:source_layer": table,
         "geolayers:geometry_type": geom,

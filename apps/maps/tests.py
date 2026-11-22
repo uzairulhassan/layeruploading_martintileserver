@@ -231,6 +231,22 @@ class MapLayerStyleLayersApiTests(TestCase):
         self.assertEqual(line["paint"]["line-opacity"], 0.5)
         self.assertEqual(line["paint"]["line-width"][0], "interpolate")
         self.assertEqual(map_layer["required_icons"], [])
+        # No categorical style → no legend block.
+        self.assertIsNone(map_layer["legend"])
+
+    def test_map_payload_includes_server_built_legend(self):
+        self.layer.style = {
+            "colorBy": {
+                "field": "metro_line",
+                "categories": {"Blue": "#2563eb", "Green": "#16a34a"},
+            }
+        }
+        self.layer.save(update_fields=["style"])
+        body = self.client.get(f"/api/maps/{self.map.id}/").json()
+        legend = body["map_layers"][0]["legend"]
+        self.assertEqual(legend["title"], "Styled")
+        self.assertEqual(legend["items"][0]["swatch"], "line")
+        self.assertEqual(legend["items"][0]["color"], "#2563eb")
 
 
 class MapStackOrderTests(TestCase):

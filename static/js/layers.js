@@ -332,9 +332,7 @@ const CATEGORY_PALETTE = [
 ];
 
 // geolayers_icons.js loads before this file on the layers page.
-const STYLE_ICON_OPTIONS = window.GeoLayersIcons?.ICON_OPTIONS || [
-  { id: "gl-poi", label: "Pin" },
-];
+const STYLE_ICON_OPTIONS = window.GeoLayersIcons?.ICON_OPTIONS || [];
 
 function fieldOptionsHtml(fields, selected, emptyLabel) {
   return `<option value="">${Auth.escapeHtml(emptyLabel)}</option>` +

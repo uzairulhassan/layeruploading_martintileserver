@@ -5,7 +5,7 @@ from apps.accounts.serializers import UserSummarySerializer
 from apps.layers.models import LayerGroup, LayerInfo
 from apps.layers.serializers import LayerInfoSerializer
 from apps.layers.share_policy import validate_share_expires_at
-from apps.layers.share_style import build_layer_paint_layers
+from apps.layers.share_style import build_layer_paint_layers, build_style_legend
 
 from .models import MapLayer, MapProject, MapShare, MapShareLink
 
@@ -14,6 +14,7 @@ class MapLayerSerializer(serializers.ModelSerializer):
     layer_detail = LayerInfoSerializer(source="layer", read_only=True)
     style_layers = serializers.SerializerMethodField()
     required_icons = serializers.SerializerMethodField()
+    legend = serializers.SerializerMethodField()
 
     class Meta:
         model = MapLayer
@@ -27,8 +28,9 @@ class MapLayerSerializer(serializers.ModelSerializer):
             "style_override",
             "style_layers",
             "required_icons",
+            "legend",
         ]
-        read_only_fields = ["id", "style_layers", "required_icons"]
+        read_only_fields = ["id", "style_layers", "required_icons", "legend"]
 
     def _paint_bundle(self, obj):
         cache = self.context.setdefault("_map_layer_paint", {})
@@ -51,6 +53,19 @@ class MapLayerSerializer(serializers.ModelSerializer):
     def get_required_icons(self, obj):
         _layers, _needs_glyphs, required_icons = self._paint_bundle(obj)
         return required_icons
+
+    def get_legend(self, obj):
+        """Same ``build_style_legend`` payload as external ``/m/`` styles."""
+        cache = self.context.setdefault("_map_layer_legend", {})
+        key = obj.pk
+        if key not in cache:
+            merged = {**(obj.layer.style or {}), **(obj.style_override or {})}
+            cache[key] = build_style_legend(
+                merged,
+                title=obj.layer.name or "",
+                geometry_type=obj.layer.geometry_type or "",
+            )
+        return cache[key]
 
 
 class MapShareSerializer(serializers.ModelSerializer):

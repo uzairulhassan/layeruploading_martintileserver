@@ -4185,16 +4185,22 @@ body.is-map-builder .page.full-bleed {
 }
 
 .map-legend-section-title {
-  margin: 0 0 0.15rem;
+  margin: 0 0 0.35rem;
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--ink);
   line-height: 1.3;
 }
 
+.map-legend-group + .map-legend-group {
+  margin-top: 0.55rem;
+}
+
 .map-legend-field {
-  margin: 0 0 0.4rem;
-  font-size: 0.7rem;
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   color: var(--ink-muted);
 }
 
@@ -4204,42 +4210,55 @@ body.is-map-builder .page.full-bleed {
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.28rem;
+  gap: 0.32rem;
 }
 
 .map-legend-item {
   display: grid;
-  grid-template-columns: 0.85rem minmax(0, 1fr);
-  gap: 0.45rem;
-  align-items: start;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .map-legend-swatch {
-  width: 0.85rem;
-  height: 0.85rem;
-  margin-top: 0.15rem;
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
   border-radius: 3px;
   border: 1px solid var(--border-strong);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
 }
 
-.map-legend-item-text {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.05rem;
+.map-legend-swatch-line {
+  width: 1.15rem;
+  height: 0.28rem;
+  border-radius: 999px;
+  border: 0;
+  box-shadow: none;
+  background: var(--swatch, currentColor);
+}
+
+.map-legend-swatch-circle {
+  border-radius: 999px;
+}
+
+.map-legend-swatch-icon {
+  display: block;
+  width: 1.05rem;
+  height: 1.05rem;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  object-fit: contain;
+  background: transparent;
 }
 
 .map-legend-item-label {
+  min-width: 0;
   font-size: 0.78rem;
   color: var(--ink);
   line-height: 1.3;
   word-break: break-word;
-}
-
-.map-legend-icon-label {
-  font-size: 0.68rem;
-  color: var(--ink-muted);
 }
 
 .layers-fab {

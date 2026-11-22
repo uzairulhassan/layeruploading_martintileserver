@@ -129,25 +129,29 @@ def build_map_share_style(
             if icon_id not in required_icons:
                 required_icons.append(icon_id)
         label_config = layer.label_config or {}
-        legend = build_style_legend(merged_style, title=layer.name)
+        legend = build_style_legend(
+            merged_style,
+            title=layer.name,
+            geometry_type=layer.geometry_type or "",
+        )
         if legend:
             legend_sections.append(legend)
         if layer.bounds is not None:
             bounds_parts.append(layer.bounds)
-        layer_meta.append(
-            {
-                "id": str(layer.id),
-                "name": layer.name,
-                "table": table,
-                "order": map_layer.order,
-                "visible": True,
-                "opacity": map_layer.opacity,
-                "geometry_type": layer.geometry_type or "",
-                "attribute_schema": layer.attribute_schema or [],
-                "label_field": (label_config.get("field") or "").strip(),
-                "legend": legend,
-            }
-        )
+        entry = {
+            "id": str(layer.id),
+            "name": layer.name,
+            "table": table,
+            "order": map_layer.order,
+            "visible": True,
+            "opacity": map_layer.opacity,
+            "geometry_type": layer.geometry_type or "",
+            "attribute_schema": layer.attribute_schema or [],
+            "label_field": (label_config.get("field") or "").strip(),
+        }
+        if legend:
+            entry["legend"] = legend
+        layer_meta.append(entry)
 
     metadata: dict = {
         "geolayers:kind": "map",

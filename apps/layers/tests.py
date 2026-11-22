@@ -690,9 +690,57 @@ class CategoricalStylePaintTests(TestCase):
         by_label = {item["label"]: item for item in legend["items"]}
         self.assertEqual(by_label["underground"]["color"], "#2563eb")
         self.assertEqual(by_label["underground"]["icon"], "gl-underground")
-        self.assertEqual(by_label["underground"]["iconLabel"], "Underground")
+        self.assertEqual(by_label["underground"]["swatch"], "icon")
+        self.assertEqual(
+            set(by_label["underground"].keys()),
+            {"label", "color", "swatch", "icon"},
+        )
         self.assertIsNone(
             build_style_legend({"color": "#0F2D53", "marker": {"type": "circle"}})
+        )
+        line_legend = build_style_legend(
+            {
+                "colorBy": {
+                    "field": "metro_line",
+                    "categories": {"Blue": "#2563eb", "Green": "#16a34a"},
+                }
+            },
+            title="Metro Lines",
+            geometry_type="LineString",
+        )
+        self.assertEqual(line_legend["items"][0]["swatch"], "line")
+
+        # Split fields: icon-shape rows only (colors live on the line layer).
+        split = build_style_legend(
+            {
+                "color": "#0F2D53",
+                "colorBy": {
+                    "field": "metro_line",
+                    "categories": {"Red line": "#dc2626", "Blue line": "#2563eb"},
+                },
+                "marker": {
+                    "type": "icon",
+                    "icon": "gl-metro",
+                    "iconBy": {
+                        "field": "station_type",
+                        "categories": {
+                            "At Grade": "gl-station",
+                            "Deep Underground": "gl-triangle",
+                        },
+                    },
+                },
+            },
+            title="Metro Stations",
+            geometry_type="Point",
+        )
+        self.assertEqual(split["field"], "station_type")
+        self.assertEqual(len(split["items"]), 2)
+        self.assertEqual(split["items"][0]["swatch"], "icon")
+        self.assertEqual(split["items"][0]["icon"], "gl-station")
+        self.assertEqual(split["items"][0]["color"], "#0F2D53")
+        self.assertEqual(
+            set(split["items"][0].keys()),
+            {"label", "color", "swatch", "icon"},
         )
 
 

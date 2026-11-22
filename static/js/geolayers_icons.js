@@ -5,8 +5,8 @@
  */
 (function (global) {
   const SIZE = 64;
-  // Ids must stay aligned with apps/layers/share_style.GEOLAYERS_ICON_IDS.
-  // ICON_OPTIONS is the single client catalog for pickers + legend labels.
+  // Ids/labels must stay aligned with apps/layers/share_style.GEOLAYERS_ICON_IDS.
+  // ICON_OPTIONS is the client catalog for style pickers.
   const ICON_OPTIONS = [
     { id: "gl-poi", label: "Pin" },
     { id: "gl-station", label: "Station" },
@@ -19,7 +19,6 @@
     { id: "gl-diamond", label: "Diamond" },
   ];
   const ICON_IDS = ICON_OPTIONS.map((opt) => opt.id);
-  const ICON_LABELS = Object.fromEntries(ICON_OPTIONS.map((opt) => [opt.id, opt.label]));
 
   function makeCanvas() {
     const canvas = document.createElement("canvas");
@@ -175,6 +174,19 @@
     return ctx.getImageData(0, 0, SIZE, SIZE);
   }
 
+  /** Colored icon PNG for legends — same glyph as MapLibre SDF icons on the map. */
+  function legendIconDataUrl(iconId, color) {
+    const { canvas, ctx } = makeCanvas();
+    const fill = /^#[0-9a-fA-F]{6}$/.test(String(color || "").trim())
+      ? String(color).trim()
+      : "#0F2D53";
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = fill;
+    const drawer = DRAWERS[iconId] || drawPin;
+    drawer(ctx);
+    return canvas.toDataURL("image/png");
+  }
+
   function ensureGeoLayersIcons(map, iconIds) {
     if (!map || typeof map.addImage !== "function") return;
     // Empty array = nothing to register. Undefined = register the full set.
@@ -194,7 +206,7 @@
   global.GeoLayersIcons = {
     ICON_IDS,
     ICON_OPTIONS,
-    ICON_LABELS,
     ensureGeoLayersIcons,
+    legendIconDataUrl,
   };
 })(typeof window !== "undefined" ? window : globalThis);
