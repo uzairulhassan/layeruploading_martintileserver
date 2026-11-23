@@ -1,0 +1,37 @@
+# Manual production deploy for GeoLayers.
+# Pushing to main does NOT deploy. Actions -> "Deploy to production" -> Run workflow.
+name: Deploy to production
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: geolayers-production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy GeoLayers
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Run deploy.sh on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT || 22 }}
+          script_stop: true
+          command_timeout: 25m
+          envs: DEPLOY_PATH
+          script: |
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+            chmod +x scripts/deploy.sh
+            SKIP_GIT_PULL=1 ./scripts/deploy.sh
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}

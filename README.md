@@ -97,3 +97,32 @@ Local live-reload: `docker compose up -d --build` (bind-mounts source).
 ## Bootstrap
 
 First account: open `/onetime/` (Admin + superuser). Public accounts use `/signup/` only when `ALLOW_PUBLIC_SIGNUP=True`.
+
+## Production deploy (GitHub Actions)
+
+Pushing to `main` does **not** update the VPS. Deploy only when you click the button:
+
+1. Push your changes to `main`.
+2. GitHub → **Actions** → **Deploy to production** → **Run workflow**.
+3. Wait for the run to go green (SSH → `scripts/deploy.sh` → rebuild → smoke check on `:8081`).
+
+Emergency fallback on the VPS (same script Actions uses):
+
+```bash
+cd /path/to/layeruploading_martintileserver
+./scripts/deploy.sh
+```
+
+### Required GitHub Actions secrets
+
+Repo **Settings → Secrets and variables → Actions**:
+
+| Secret | Meaning |
+| --- | --- |
+| `DEPLOY_HOST` | VPS hostname or IP |
+| `DEPLOY_USER` | SSH user |
+| `DEPLOY_SSH_KEY` | Private key (full PEM) that can SSH as that user |
+| `DEPLOY_PATH` | Absolute path to this repo clone on the VPS |
+| `DEPLOY_SSH_PORT` | Optional; defaults to `22` if unset |
+
+The VPS clone must be able to `git pull origin main` non-interactively (deploy key or credential helper). Shared infra (`geo_infra`) has its own separate Deploy workflow.
