@@ -53,6 +53,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # After the stack so DEBUG technical 404/403 HTML can be swapped for branded pages.
+    "apps.core.error_views.BrandedHttpErrorMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

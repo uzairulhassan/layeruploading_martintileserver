@@ -31,6 +31,11 @@ urlpatterns = [
     path("", include("apps.core.urls")),
 ]
 
+# Branded browser error pages (HTML). /api/ unmatched routes still get JSON.
+handler404 = "apps.core.error_views.page_not_found"
+handler403 = "apps.core.error_views.permission_denied"
+handler500 = "apps.core.error_views.server_error"
+
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 else:

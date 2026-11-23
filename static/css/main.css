@@ -5213,3 +5213,88 @@ body.is-map-builder .page.full-bleed {
     transition: none !important;
   }
 }
+
+/* —— Branded HTTP error pages (404 / 403 / 500) —— */
+body.error-page-body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background:
+    radial-gradient(120% 80% at 10% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 55%),
+    radial-gradient(90% 70% at 100% 100%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 50%),
+    var(--surface-soft);
+  color: var(--ink);
+}
+
+.error-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(1.5rem, 4vw, 3rem) 1.25rem;
+}
+
+.error-page-card {
+  width: min(28rem, 100%);
+  text-align: center;
+}
+
+.error-page-brand {
+  display: inline-flex;
+  margin-bottom: 1.75rem;
+}
+
+.error-page-brand .brand-logo {
+  width: auto;
+  height: 2.75rem;
+}
+
+.error-page-status {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.error-page-title {
+  margin: 0 0 0.65rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.55rem, 3.5vw, 1.95rem);
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.error-page-lede {
+  margin: 0 auto 1.35rem;
+  max-width: 26rem;
+  font-size: 0.98rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+
+.error-page-ref {
+  margin: 0 0 1.35rem;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+}
+
+.error-page-ref code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
+.error-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: center;
+}
+
+.error-page-actions .btn {
+  min-width: 7.5rem;
+}
