@@ -62,33 +62,33 @@ function renderLayers() {
     const owner = layer.owner_detail ? (layer.owner_detail.display_name || layer.owner_detail.username) : "";
     return `
     <tr>
-      <td>
+      <td data-label="Name">
         <div class="cell-entity">
           <span class="cell-icon tone-${meta.tone}" aria-hidden="true">${LAYER_ICONS[meta.icon]}</span>
           <span class="cell-entity-name">${Auth.escapeHtml(layer.name)}</span>
           ${groupBadge(layer)}
         </div>
       </td>
-      <td>
+      <td data-label="Geometry">
         <div class="cell-meta">
           <span class="cell-meta-icon" aria-hidden="true">${LAYER_ICONS[meta.geomIcon]}</span>
           <span>${Auth.escapeHtml(layer.geometry_type || "—")}</span>
         </div>
       </td>
-      <td>
+      <td data-label="Features">
         <div class="cell-meta">
           <span class="cell-meta-icon" aria-hidden="true">${LAYER_ICONS.layers}</span>
           <span>${Number(layer.feature_count || 0).toLocaleString()}</span>
         </div>
       </td>
-      <td>
+      <td data-label="Owner">
         <div class="cell-meta">
           <span class="cell-meta-icon" aria-hidden="true">${LAYER_ICONS.user}</span>
           <span>${Auth.escapeHtml(owner)}</span>
         </div>
       </td>
-      <td><span class="badge badge-access">${Auth.escapeHtml(permissionLabel(layer.my_permission))}</span></td>
-      <td class="table-actions">
+      <td data-label="Access"><span class="badge badge-access">${Auth.escapeHtml(permissionLabel(layer.my_permission))}</span></td>
+      <td class="table-actions" data-label="Actions">
         <div class="action-btn-row">
           <button type="button" class="action-btn" data-action="style" data-id="${layer.id}" title="Style">
             ${LAYER_ICONS.style}<span>Style</span>

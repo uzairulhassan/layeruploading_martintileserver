@@ -100,21 +100,21 @@ function renderMaps() {
   }
   tbody.innerHTML = maps.map((map) => `
     <tr>
-      <td>
+      <td data-label="Name">
         <a class="cell-entity cell-entity-link" href="/maps/${map.id}/">
           <span class="cell-icon tone-blue" aria-hidden="true">${MAP_ICONS.map}</span>
           <span class="cell-entity-name">${Auth.escapeHtml(map.name)}</span>
         </a>
       </td>
-      <td><span class="cell-count">${map.map_layers.length}</span></td>
-      <td>${Auth.escapeHtml(ownerLabel(map))}</td>
-      <td>
+      <td data-label="Layers"><span class="cell-count">${map.map_layers.length}</span></td>
+      <td data-label="Owner">${Auth.escapeHtml(ownerLabel(map))}</td>
+      <td data-label="Access">
         <span class="badge badge-access">
           <span class="badge-icon" aria-hidden="true">${MAP_ICONS.access}</span>
           ${Auth.escapeHtml(permissionLabel(map.my_permission))}
         </span>
       </td>
-      <td class="table-actions">
+      <td class="table-actions" data-label="Actions">
         <div class="action-btn-row">
           ${actionLink(`/maps/${map.id}/`, "open", "Open")}
           ${map.my_permission === "owner" ? `

@@ -110,6 +110,11 @@ function closeOpenLayerMenus(except = null) {
   });
 }
 
+function isCompactBuilder() {
+  /* Keep in sync with main.css builder bottom-sheet breakpoint. */
+  return window.matchMedia("(max-width: 720px)").matches;
+}
+
 function bindBuilderChrome() {
   document.querySelectorAll("[data-builder-tab]").forEach((btn) => {
     btn.addEventListener("click", () => setBuilderTab(btn.dataset.builderTab));
@@ -120,6 +125,9 @@ function bindBuilderChrome() {
     const collapsed = document.getElementById("layers-panel")?.classList.contains("is-collapsed");
     setLayersPanelOpen(!!collapsed);
   });
+
+  // Phones: map first; layers open via FAB / bottom sheet.
+  if (isCompactBuilder()) setLayersPanelOpen(false);
 
   document.getElementById("add-layer-btn")?.addEventListener("click", () => {
     const picker = document.getElementById("add-layer-picker");
