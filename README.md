@@ -125,4 +125,4 @@ Repo **Settings → Secrets and variables → Actions**:
 | `DEPLOY_PATH` | Absolute path to this repo clone on the VPS |
 | `DEPLOY_SSH_PORT` | Optional; defaults to `22` if unset |
 
-The VPS clone must be able to `git pull origin main` non-interactively (deploy key or credential helper). Shared infra (`geo_infra`) has its own separate Deploy workflow.
+The VPS clone must be able to `git pull origin main` non-interactively (deploy key or credential helper). Shared infra (`geo_infra`) and GeoTrak Maps (`naqel-mapserver` / VPS `geotrak-maps`) have their own Deploy workflows.
