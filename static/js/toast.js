@@ -115,10 +115,15 @@ const Toast = (() => {
   }
 
   /** Human-readable message from a parsed API JSON body. */
-  function fromApiBody(body, fallback = "Request failed.") {
+  function fromApiBody(body, fallback = "Request failed.", options = {}) {
     if (typeof Auth !== "undefined" && Auth.formatApiErrors) {
-      return Auth.formatApiErrors(body, fallback);
+      return Auth.formatApiErrors(body, fallback, options);
     }
+    if (options.status >= 500 || (body && body.code === "INTERNAL_ERROR")) {
+      const ref = body && body.request_id ? ` (Ref: ${body.request_id})` : "";
+      return `Something went wrong. Please try again.${ref}`;
+    }
+    if (body && typeof body.message === "string" && body.message.trim()) return body.message.trim();
     if (body && typeof body.detail === "string") return body.detail;
     return fallback;
   }
@@ -126,7 +131,7 @@ const Toast = (() => {
   /** Human-readable message from a failed fetch Response. */
   async function fromResponse(response, fallback = "Request failed.") {
     const body = await response.json().catch(() => ({}));
-    return fromApiBody(body, fallback);
+    return fromApiBody(body, fallback, { status: response.status });
   }
 
   if (document.readyState === "loading") {

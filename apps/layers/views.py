@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.permissions import CanShareLayers, CanUploadLayers
+from apps.core.api_errors import ErrorCode, error_response
 
 from .kml_import import import_kml, is_kml_upload
 from .models import LayerGroup, LayerInfo, LayerShare, LayerShareLink
@@ -19,7 +20,6 @@ from .serializers import (
     LayerUploadSerializer,
 )
 from .services import (
-    LayerImportError,
     delete_layer,
     delete_layer_group,
     distinct_attribute_values,
@@ -33,10 +33,15 @@ def visible_layers(user):
     return LayerInfo.objects.filter(Q(owner=user) | Q(shares__shared_with=user)).distinct()
 
 
-def _owner_forbidden(layer, user, detail="Only the owner can manage this layer."):
+def _owner_forbidden(request, layer, user, detail="Only the owner can manage this layer."):
     if layer.owner_id == user.id:
         return None
-    return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
+    return error_response(
+        request,
+        message=detail,
+        code=ErrorCode.PERMISSION_DENIED,
+        status_code=status.HTTP_403_FORBIDDEN,
+    )
 
 
 class LayerViewSet(viewsets.ModelViewSet):
@@ -70,15 +75,13 @@ class LayerViewSet(viewsets.ModelViewSet):
         }
         context = self.get_serializer_context()
 
-        try:
-            if is_kml_upload(data["file"].name):
-                group = import_kml(**upload_kwargs)
-                payload = {"group": LayerGroupSerializer(group, context=context).data}
-            else:
-                layer = import_shapefile(**upload_kwargs)
-                payload = LayerInfoSerializer(layer, context=context).data
-        except LayerImportError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        # PublicError / LayerImportError → global handler (safe body, no ogr2ogr stderr).
+        if is_kml_upload(data["file"].name):
+            group = import_kml(**upload_kwargs)
+            payload = {"group": LayerGroupSerializer(group, context=context).data}
+        else:
+            layer = import_shapefile(**upload_kwargs)
+            payload = LayerInfoSerializer(layer, context=context).data
 
         return Response(payload, status=status.HTTP_201_CREATED)
 
@@ -91,15 +94,16 @@ class LayerViewSet(viewsets.ModelViewSet):
         layer = self.get_object()
         field = (request.query_params.get("field") or "").strip()
         if not field:
-            return Response({"detail": "Query parameter 'field' is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                message="Query parameter 'field' is required.",
+                code=ErrorCode.VALIDATION_ERROR,
+            )
         try:
             limit = int(request.query_params.get("limit") or 40)
         except (TypeError, ValueError):
             limit = 40
-        try:
-            values = distinct_attribute_values(layer, field, limit=limit)
-        except ValueError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        values = distinct_attribute_values(layer, field, limit=limit)
         return Response({"field": field, "values": values, "count": len(values)})
 
     @action(detail=True, methods=["post"], url_path="preview-style")
@@ -137,7 +141,7 @@ class LayerViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def share(self, request, pk=None):
         layer = self.get_object()
-        if denied := _owner_forbidden(layer, request.user, "Only the owner can share this layer."):
+        if denied := _owner_forbidden(request, layer, request.user, "Only the owner can share this layer."):
             return denied
 
         serializer = LayerShareSerializer(data={**request.data, "layer": layer.id})
@@ -145,7 +149,11 @@ class LayerViewSet(viewsets.ModelViewSet):
 
         shared_with = serializer.validated_data["shared_with"]
         if shared_with.id == layer.owner_id:
-            return Response({"detail": "Cannot share a layer with its owner."}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                message="Cannot share a layer with its owner.",
+                code=ErrorCode.BAD_REQUEST,
+            )
 
         share, _ = LayerShare.objects.update_or_create(
             layer=layer,
@@ -160,13 +168,18 @@ class LayerViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def unshare(self, request, pk=None):
         layer = self.get_object()
-        if denied := _owner_forbidden(layer, request.user, "Only the owner can modify sharing."):
+        if denied := _owner_forbidden(request, layer, request.user, "Only the owner can modify sharing."):
             return denied
 
         user_id = request.data.get("user_id")
         deleted, _ = LayerShare.objects.filter(layer=layer, shared_with_id=user_id).delete()
         if not deleted:
-            return Response({"detail": "Share not found."}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(
+                request,
+                message="Share not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["get", "post"], url_path="share-links")
@@ -174,7 +187,7 @@ class LayerViewSet(viewsets.ModelViewSet):
         """List or create revocable external share links for this layer."""
         layer = self.get_object()
         if denied := _owner_forbidden(
-            layer, request.user, "Only the owner can manage external share links."
+            request, layer, request.user, "Only the owner can manage external share links."
         ):
             return denied
 
@@ -193,13 +206,18 @@ class LayerViewSet(viewsets.ModelViewSet):
     def revoke_share_link(self, request, pk=None, link_id=None):
         layer = self.get_object()
         if denied := _owner_forbidden(
-            layer, request.user, "Only the owner can manage external share links."
+            request, layer, request.user, "Only the owner can manage external share links."
         ):
             return denied
 
         deleted, _ = LayerShareLink.objects.filter(id=link_id, layer=layer).delete()
         if not deleted:
-            return Response({"detail": "Share link not found."}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(
+                request,
+                message="Share link not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -228,22 +246,31 @@ class LayerGroupViewSet(
     def perform_destroy(self, instance):
         delete_layer_group(instance)
 
-    def _group_owner_forbidden(self, group, detail="Only the owner can manage this group."):
-        if group.owner_id == self.request.user.id:
+    def _group_owner_forbidden(self, request, group, detail="Only the owner can manage this group."):
+        if group.owner_id == request.user.id:
             return None
-        return Response({"detail": detail}, status=status.HTTP_403_FORBIDDEN)
+        return error_response(
+            request,
+            message=detail,
+            code=ErrorCode.PERMISSION_DENIED,
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
 
     @action(detail=True, methods=["post"])
     def share(self, request, pk=None):
         """Share every layer in the group with one user."""
         group = self.get_object()
-        if denied := self._group_owner_forbidden(group, "Only the owner can share this group."):
+        if denied := self._group_owner_forbidden(request, group, "Only the owner can share this group."):
             return denied
         serializer = LayerGroupShareSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         shared_with = serializer.validated_data["shared_with"]
         if shared_with.id == group.owner_id:
-            return Response({"detail": "Cannot share a group with its owner."}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                message="Cannot share a group with its owner.",
+                code=ErrorCode.BAD_REQUEST,
+            )
 
         permission = serializer.validated_data["permission"]
         layers = list(LayerInfo.objects.filter(group=group))
@@ -262,9 +289,14 @@ class LayerGroupViewSet(
     def unshare(self, request, pk=None):
         """Remove one user's access to every layer in the group."""
         group = self.get_object()
-        if denied := self._group_owner_forbidden(group, "Only the owner can modify sharing."):
+        if denied := self._group_owner_forbidden(request, group, "Only the owner can modify sharing."):
             return denied
         deleted, _ = LayerShare.objects.filter(layer__group=group, shared_with_id=request.data.get("user_id")).delete()
         if not deleted:
-            return Response({"detail": "Share not found."}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(
+                request,
+                message="Share not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)

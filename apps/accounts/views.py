@@ -9,6 +9,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from apps.core.api_errors import ErrorCode, error_response, stringify_detail
+
 from .models import Role, User
 from .permissions import CanManageRoles
 from .security import (
@@ -70,9 +72,11 @@ class RegisterView(BaseRegisterView):
 
     def create(self, request, *args, **kwargs):
         if not public_signup_allowed():
-            return Response(
-                {"detail": PUBLIC_SIGNUP_CLOSED_MESSAGE},
-                status=status.HTTP_403_FORBIDDEN,
+            return error_response(
+                request,
+                message=PUBLIC_SIGNUP_CLOSED_MESSAGE,
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=status.HTTP_403_FORBIDDEN,
             )
         return super().create(request, *args, **kwargs)
 
@@ -88,9 +92,11 @@ class OnetimeRegisterView(BaseRegisterView):
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT pg_advisory_xact_lock(%s)", [_ONETIME_ADVISORY_LOCK_KEY])
             if User.objects.exists():
-                return Response(
-                    {"detail": "Initial setup is already complete."},
-                    status=status.HTTP_403_FORBIDDEN,
+                return error_response(
+                    request,
+                    message="Initial setup is already complete.",
+                    code=ErrorCode.PERMISSION_DENIED,
+                    status_code=status.HTTP_403_FORBIDDEN,
                 )
             return super().create(request, *args, **kwargs)
 
@@ -105,9 +111,11 @@ class UsernameAvailabilityView(APIView):
         # Anonymous probing only while signup or first-time onetime is open.
         if not request.user.is_authenticated:
             if not public_signup_allowed() and User.objects.exists():
-                return Response(
-                    {"detail": "Username checks are not available."},
-                    status=status.HTTP_403_FORBIDDEN,
+                return error_response(
+                    request,
+                    message="Username checks are not available.",
+                    code=ErrorCode.PERMISSION_DENIED,
+                    status_code=status.HTTP_403_FORBIDDEN,
                 )
 
         serializer = UsernameAvailabilitySerializer(data=request.query_params)
@@ -133,9 +141,11 @@ def _run_credential_gate(request, *, serializer):
     client_ip = client_ip_from_request(request)
 
     if identifier and is_login_locked(client_ip=client_ip, identifier=identifier):
-        return None, Response(
-            {"detail": "Too many failed sign-in attempts. Please try again later."},
-            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        return None, error_response(
+            request,
+            message="Too many failed sign-in attempts. Please try again later.",
+            code=ErrorCode.THROTTLED,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         )
 
     try:
@@ -143,9 +153,11 @@ def _run_credential_gate(request, *, serializer):
     except AuthenticationFailed as exc:
         if identifier:
             register_failed_login(client_ip=client_ip, identifier=identifier)
-        return None, Response(
-            {"detail": exc.detail},
-            status=status.HTTP_401_UNAUTHORIZED,
+        return None, error_response(
+            request,
+            message=stringify_detail(exc.detail) or "Invalid username/email or password.",
+            code=ErrorCode.AUTHENTICATION_FAILED,
+            status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
     clear_failed_logins(client_ip=client_ip, identifier=identifier)

@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.accounts.permissions import CanCreateMaps, CanShareMaps
+from apps.core.api_errors import ErrorCode, error_response
 from apps.layers.models import LayerInfo
 from apps.layers.serializers import sort_group_layers
 
@@ -43,8 +44,11 @@ class MapProjectViewSet(viewsets.ModelViewSet):
         """Add every layer of a KML/KMZ group the user can see, polygons at the bottom."""
         layers = sort_group_layers(self._accessible_layers(self.request.user).filter(group=group))
         if not layers:
-            return Response(
-                {"detail": "You do not have access to this group."}, status=status.HTTP_403_FORBIDDEN
+            return error_response(
+                self.request,
+                message="You do not have access to this group.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         start = data.get("order")
@@ -83,8 +87,11 @@ class MapProjectViewSet(viewsets.ModelViewSet):
         layer = serializer.validated_data["layer"]
 
         if not self._accessible_layers(request.user).filter(id=layer.id).exists():
-            return Response(
-                {"detail": "You do not have access to this layer."}, status=status.HTTP_403_FORBIDDEN
+            return error_response(
+                request,
+                message="You do not have access to this layer.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         map_layer = insert_map_layer_with_stack(
@@ -102,7 +109,12 @@ class MapProjectViewSet(viewsets.ModelViewSet):
         map_project = self.get_object()
         map_layer = map_project.map_layers.filter(id=map_layer_id).first()
         if map_layer is None:
-            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(
+                request,
+                message="Not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
 
         if request.method == "DELETE":
             map_layer.delete()
@@ -141,14 +153,23 @@ class MapProjectViewSet(viewsets.ModelViewSet):
     def share(self, request, pk=None):
         map_project = self.get_object()
         if map_project.owner_id != request.user.id:
-            return Response({"detail": "Only the owner can share this map."}, status=status.HTTP_403_FORBIDDEN)
+            return error_response(
+                request,
+                message="Only the owner can share this map.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
 
         serializer = MapShareSerializer(data={**request.data, "map": map_project.id})
         serializer.is_valid(raise_exception=True)
 
         shared_with = serializer.validated_data["shared_with"]
         if shared_with.id == map_project.owner_id:
-            return Response({"detail": "Cannot share a map with its owner."}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                request,
+                message="Cannot share a map with its owner.",
+                code=ErrorCode.BAD_REQUEST,
+            )
 
         share, _ = MapShare.objects.update_or_create(
             map=map_project,
@@ -164,12 +185,22 @@ class MapProjectViewSet(viewsets.ModelViewSet):
     def unshare(self, request, pk=None):
         map_project = self.get_object()
         if map_project.owner_id != request.user.id:
-            return Response({"detail": "Only the owner can modify sharing."}, status=status.HTTP_403_FORBIDDEN)
+            return error_response(
+                request,
+                message="Only the owner can modify sharing.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=status.HTTP_403_FORBIDDEN,
+            )
 
         user_id = request.data.get("user_id")
         deleted, _ = MapShare.objects.filter(map=map_project, shared_with_id=user_id).delete()
         if not deleted:
-            return Response({"detail": "Share not found."}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(
+                request,
+                message="Share not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["get", "post"], url_path="share-links")
@@ -177,9 +208,11 @@ class MapProjectViewSet(viewsets.ModelViewSet):
         """List or create revocable external share links for this map."""
         map_project = self.get_object()
         if map_project.owner_id != request.user.id:
-            return Response(
-                {"detail": "Only the owner can manage external share links."},
-                status=status.HTTP_403_FORBIDDEN,
+            return error_response(
+                request,
+                message="Only the owner can manage external share links.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         if request.method == "GET":
@@ -200,12 +233,19 @@ class MapProjectViewSet(viewsets.ModelViewSet):
     def revoke_share_link(self, request, pk=None, link_id=None):
         map_project = self.get_object()
         if map_project.owner_id != request.user.id:
-            return Response(
-                {"detail": "Only the owner can manage external share links."},
-                status=status.HTTP_403_FORBIDDEN,
+            return error_response(
+                request,
+                message="Only the owner can manage external share links.",
+                code=ErrorCode.PERMISSION_DENIED,
+                status_code=status.HTTP_403_FORBIDDEN,
             )
 
         deleted, _ = MapShareLink.objects.filter(id=link_id, map=map_project).delete()
         if not deleted:
-            return Response({"detail": "Share link not found."}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(
+                request,
+                message="Share link not found.",
+                code=ErrorCode.NOT_FOUND,
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
         return Response(status=status.HTTP_204_NO_CONTENT)

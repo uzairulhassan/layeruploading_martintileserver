@@ -219,7 +219,7 @@
     const response = await Auth.apiFetch("/api/auth/me/");
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      Toast.error(Toast.fromApiBody(body, "Could not load profile."));
+      Toast.error(Toast.fromApiBody(body, "Could not load profile.", { status: response.status }));
       return;
     }
     applyProfile(body);
@@ -245,7 +245,7 @@
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(Toast.fromApiBody(body, "Upload failed."));
+        throw new Error(Toast.fromApiBody(body, "Upload failed.", { status: response.status }));
       }
       applyProfile(body);
       Toast.success("Profile photo updated.");
@@ -261,7 +261,7 @@
       const response = await Auth.apiFetch("/api/auth/me/avatar/", { method: "DELETE" });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(Toast.fromApiBody(body, "Could not remove photo."));
+        throw new Error(Toast.fromApiBody(body, "Could not remove photo.", { status: response.status }));
       }
       applyProfile(body);
       Toast.success("Profile photo removed.");
@@ -304,7 +304,7 @@
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(Toast.fromApiBody(body, "Could not save changes."));
+        throw new Error(Toast.fromApiBody(body, "Could not save changes.", { status: response.status }));
       }
       applyProfile(body);
       Toast.success("Account updated.");

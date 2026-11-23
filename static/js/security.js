@@ -55,7 +55,7 @@
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(Toast.fromApiBody(body, "Could not update password."));
+        throw new Error(Toast.fromApiBody(body, "Could not update password.", { status: response.status }));
       }
       form.reset();
       form.querySelectorAll(".password-field input").forEach((input) => {

@@ -7,6 +7,7 @@ introspection, table drop). Layer row deletes drop tables via the ``LayerInfo``
 ``LAYER_TABLE_SCHEMA`` (default ``layers_data``) and is served by Martin via
 ``layers_data.geolayers_tile(?layer=<table>)`` with no catalog reload.
 """
+import logging
 import shutil
 import subprocess
 import tempfile
@@ -17,7 +18,11 @@ from pathlib import Path
 from django.conf import settings
 from django.db import connection, transaction
 
+from apps.core.api_errors import ErrorCode, PublicError
+
 from .models import LayerGroup, LayerInfo
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_SHAPEFILE_EXTENSIONS = {".shp", ".shx", ".dbf"}
 
@@ -30,9 +35,19 @@ _GEOMETRY_TYPE_MAP = {
     "MULTIPOLYGON": LayerInfo.GeometryType.MULTIPOLYGON,
 }
 
+# Safe client copy when GDAL/ogr2ogr fails — never include stderr or install paths.
+LAYER_IMPORT_FAILED_MESSAGE = (
+    "We could not import this file. Check the format and try again."
+)
+LAYER_IMPORT_TOOLS_UNAVAILABLE_MESSAGE = (
+    "Map import tools are not available right now. Please try again later or contact support."
+)
 
-class LayerImportError(Exception):
-    """Raised for any user-correctable failure in an import pipeline (shapefile or KML)."""
+
+class LayerImportError(PublicError):
+    """User-correctable import failure (shapefile / KML). Message must be client-safe."""
+
+    default_code = ErrorCode.LAYER_IMPORT_FAILED
 
 
 def _pg_connection_string() -> str:
@@ -138,15 +153,28 @@ def _run_ogr2ogr(shp_path: Path, schema_name: str, table_name: str):
 
 
 def run_ogr2ogr(cmd: list[str]):
-    """Run one ogr2ogr command; failures become a user-facing ``LayerImportError``."""
+    """Run one ogr2ogr command; failures become a safe ``LayerImportError``.
+
+    Full ogr2ogr stderr/stdout and install paths are logged server-side only —
+    never returned to API clients.
+    """
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     except FileNotFoundError as exc:
-        raise LayerImportError(
-            f"ogr2ogr executable not found at '{settings.OGR2OGR_PATH}'. Is GDAL installed?"
-        ) from exc
+        logger.error(
+            "ogr2ogr executable not found at %s: %s",
+            settings.OGR2OGR_PATH,
+            exc,
+        )
+        raise LayerImportError(LAYER_IMPORT_TOOLS_UNAVAILABLE_MESSAGE) from exc
     if result.returncode != 0:
-        raise LayerImportError(f"ogr2ogr failed: {result.stderr.strip() or result.stdout.strip()}")
+        detail = (result.stderr or result.stdout or "").strip()
+        logger.error(
+            "ogr2ogr failed (exit %s): %s",
+            result.returncode,
+            detail or "(no output)",
+        )
+        raise LayerImportError(LAYER_IMPORT_FAILED_MESSAGE)
 
 
 def _introspect_table(schema_name: str, table_name: str) -> dict:
@@ -259,7 +287,10 @@ def distinct_attribute_values(layer: LayerInfo, field_name: str, *, limit: int =
     """
     allowed = {col.get("name") for col in (layer.attribute_schema or []) if col.get("name")}
     if field_name not in allowed:
-        raise ValueError(f"Unknown attribute field: {field_name}")
+        raise PublicError(
+            "Unknown attribute field.",
+            code=ErrorCode.VALIDATION_ERROR,
+        )
 
     limit = max(1, min(int(limit or 40), 80))
     with connection.cursor() as cursor:

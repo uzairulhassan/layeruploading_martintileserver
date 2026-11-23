@@ -185,7 +185,7 @@ document.getElementById("upload-form").addEventListener("submit", async (event) 
     const res = await Auth.apiFetch("/api/layers/", { method: "POST", body: formData });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(Toast.fromApiBody(body, "Upload failed."));
+      throw new Error(Toast.fromApiBody(body, "Upload failed.", { status: res.status }));
     }
     document.getElementById("upload-form").reset();
     Auth.closeModal("upload-modal");

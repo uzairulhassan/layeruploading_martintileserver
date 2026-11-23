@@ -45,6 +45,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "apps.core.request_id.RequestIDMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -174,6 +175,7 @@ ALLOW_PUBLIC_SIGNUP = env.bool("ALLOW_PUBLIC_SIGNUP", default=False)
 # Django REST Framework / SimpleJWT
 # ---------------------------------------------------------------------------
 REST_FRAMEWORK = {
+    "EXCEPTION_HANDLER": "apps.core.exception_handler.custom_exception_handler",
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -194,6 +196,47 @@ REST_FRAMEWORK = {
         "rest_framework.parsers.MultiPartParser",
         "rest_framework.parsers.FormParser",
     ),
+}
+
+# ---------------------------------------------------------------------------
+# Logging (request_id appears when present on the record)
+# ---------------------------------------------------------------------------
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "request_id": {
+            "()": "apps.core.logging_filters.RequestIDFilter",
+        },
+    },
+    "formatters": {
+        "standard": {
+            "format": "%(levelname)s %(asctime)s [%(name)s] [request_id=%(request_id)s] %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "filters": ["request_id"],
+            "formatter": "standard",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": env("LOG_LEVEL", default="INFO"),
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "apps": {
+            "handlers": ["console"],
+            "level": env("LOG_LEVEL", default="INFO"),
+            "propagate": False,
+        },
+    },
 }
 
 SIMPLE_JWT = {

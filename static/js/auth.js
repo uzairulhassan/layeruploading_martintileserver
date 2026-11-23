@@ -69,18 +69,48 @@ const Auth = (() => {
     return match ? decodeURIComponent(match[2]) : null;
   }
 
-  function formatApiErrors(body, fallback = "Request failed.") {
+  /**
+   * Human-readable message from an API error body.
+   * Prefers the standardized {code, message, errors, request_id} contract.
+   * Never surfaces raw 5xx / INTERNAL_ERROR payloads beyond a generic message + ref.
+   *
+   * @param {object} body
+   * @param {string} [fallback]
+   * @param {{ status?: number }} [options]
+   */
+  function formatApiErrors(body, fallback = "Request failed.", options = {}) {
     if (!body || typeof body !== "object") return fallback;
-    if (body.detail) {
-      return typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+
+    const status = Number(options.status) || 0;
+    const code = typeof body.code === "string" ? body.code : "";
+    const requestId = typeof body.request_id === "string" ? body.request_id.trim() : "";
+
+    if (code === "INTERNAL_ERROR" || status >= 500) {
+      let msg = "Something went wrong. Please try again.";
+      if (requestId) msg = `${msg} (Ref: ${requestId})`;
+      return msg;
     }
-    const parts = [];
-    for (const [key, value] of Object.entries(body)) {
-      if (key === "errors") continue;
-      const msg = Array.isArray(value) ? value.join(" ") : String(value);
-      parts.push(key === "non_field_errors" ? msg : `${key}: ${msg}`);
+
+    if (body.errors && typeof body.errors === "object") {
+      const parts = [];
+      for (const [key, value] of Object.entries(body.errors)) {
+        const msg = Array.isArray(value) ? value.join(" ") : String(value);
+        parts.push(key === "non_field_errors" ? msg : `${key}: ${msg}`);
+      }
+      if (parts.length) return parts.join(" ");
     }
-    return parts.join(" ") || fallback;
+
+    if (typeof body.message === "string" && body.message.trim()) {
+      return body.message.trim();
+    }
+
+    if (typeof body.detail === "string" && body.detail.trim()) {
+      return body.detail.trim();
+    }
+    if (body.detail != null && typeof body.detail !== "string") {
+      return JSON.stringify(body.detail);
+    }
+    return fallback;
   }
 
   async function login(username, password) {
@@ -92,10 +122,13 @@ const Auth = (() => {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
+      const opts = { status: response.status };
       if (response.status === 429) {
-        throw new Error(formatApiErrors(body, "Too many sign-in attempts. Please try again later."));
+        throw new Error(
+          formatApiErrors(body, "Too many sign-in attempts. Please try again later.", opts)
+        );
       }
-      throw new Error(formatApiErrors(body, "Invalid username/email or password."));
+      throw new Error(formatApiErrors(body, "Invalid username/email or password.", opts));
     }
     const data = await response.json();
     return data.user;
@@ -110,10 +143,13 @@ const Auth = (() => {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
+      const opts = { status: response.status };
       if (response.status === 429) {
-        throw new Error(formatApiErrors(body, "Too many registration attempts. Please try again later."));
+        throw new Error(
+          formatApiErrors(body, "Too many registration attempts. Please try again later.", opts)
+        );
       }
-      throw new Error(formatApiErrors(body));
+      throw new Error(formatApiErrors(body, "Request failed.", opts));
     }
     return body;
   }
