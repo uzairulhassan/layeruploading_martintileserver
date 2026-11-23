@@ -432,14 +432,13 @@ body:has(.auth-page) .toast-host {
   max-width: 100%;
 }
 
-/* Dark chrome surfaces (sidebar / builder): show white wordmark. */
-html[data-chrome="dark"] .sidebar .brand-logo--colour,
-html[data-chrome="dark"] .builder-brand .brand-logo--colour {
+/* Dark chrome (midnight, etc.): white wordmark everywhere brand_logo.html is used
+   (sidebar, map builder, error pages). Auth stage hardcodes the white asset instead. */
+html[data-chrome="dark"] .brand-logo--colour {
   display: none;
 }
 
-html[data-chrome="dark"] .sidebar .brand-logo--white,
-html[data-chrome="dark"] .builder-brand .brand-logo--white {
+html[data-chrome="dark"] .brand-logo--white {
   display: block;
 }
 
